@@ -1,12 +1,13 @@
 import * as React from 'react'
-import renderer from 'react-test-renderer'
+import { render } from '@testing-library/react-native'
 
 import { ThemedText } from '../ThemedText'
 
-it(`renders correctly`, () => {
-    const tree = renderer
-        .create(<ThemedText>Snapshot test!</ThemedText>)
-        .toJSON()
+jest.mock('@/hooks/useThemeColor', () => ({
+    useThemeColor: () => '#11181C',
+}))
 
-    expect(tree).toMatchSnapshot()
+it(`renders correctly`, () => {
+    const { toJSON } = render(<ThemedText>Snapshot test!</ThemedText>)
+    expect(toJSON()).toMatchSnapshot()
 })
