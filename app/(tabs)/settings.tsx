@@ -1,24 +1,14 @@
 import {
-    StyleSheet,
-    Image,
-    Platform,
     View,
-    TextInput,
-    Alert,
     Text,
     Pressable,
+    Alert,
+    ScrollView,
 } from 'react-native'
 import { useState, useEffect } from 'react'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { ScrollView } from 'react-native-gesture-handler'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 
-import { Collapsible } from '@/components/Collapsible'
-import { ExternalLink } from '@/components/ExternalLink'
-import ParallaxScrollView from '@/components/ParallaxScrollView'
-import { ThemedText } from '@/components/ThemedText'
-import { ThemedView } from '@/components/ThemedView'
-import { IconSymbol } from '@/components/ui/IconSymbol'
 import { LocationBar } from '@/components/LocationBar'
 import { DroneProfileSelector } from '@/components/DroneProfileSelector'
 import {
@@ -26,69 +16,25 @@ import {
     DEFAULT_WEATHER_THRESHOLDS,
 } from '@/types/weatherConfig'
 import { WeatherConfigService } from '@/services/weatherConfigService'
-import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
+import {
+    useWeatherConfig,
+    thresholdsMatch,
+} from '@/contexts/WeatherConfigContext'
 import { useLocation } from '@/contexts/LocationContext'
 import { SettingsSlider } from '@/components/SettingsSlider'
 import { DroneProfile } from '@/types/droneProfiles'
-
-interface SettingItemProps {
-    icon: keyof typeof MaterialCommunityIcons.glyphMap
-    label: string
-    value: string
-    onChangeText: (value: string) => void
-    unit: string
-    sublabel?: string
-}
-
-function SettingItem({
-    icon,
-    label,
-    value,
-    onChangeText,
-    unit,
-    sublabel,
-}: SettingItemProps) {
-    return (
-        <View className="bg-gray-800/50 rounded-lg p-4 mb-3">
-            <View className="flex-row items-center mb-2">
-                <MaterialCommunityIcons
-                    name={icon}
-                    size={24}
-                    color="#60A5FA"
-                    className="opacity-75"
-                />
-                <Text className="text-white text-lg font-semibold ml-2">
-                    {label}
-                </Text>
-            </View>
-            {sublabel && (
-                <Text className="text-gray-400 text-sm mb-2 ml-9">
-                    {sublabel}
-                </Text>
-            )}
-            <View className="flex-row items-center ml-9">
-                <TextInput
-                    className="flex-1 bg-gray-700 text-white p-2 rounded-l-lg text-center text-lg"
-                    value={value}
-                    onChangeText={onChangeText}
-                    keyboardType="numeric"
-                />
-                <View className="bg-gray-600 px-3 py-2 rounded-r-lg">
-                    <Text className="text-gray-300 text-lg">{unit}</Text>
-                </View>
-            </View>
-        </View>
-    )
-}
 
 export default function SettingsScreen() {
     const [thresholds, setThresholds] = useState<WeatherThresholds>(
         DEFAULT_WEATHER_THRESHOLDS
     )
-    const [selectedDroneProfile, setSelectedDroneProfile] =
-        useState<DroneProfile | null>(null)
     const [isLoading, setIsLoading] = useState(true)
-    const { refreshThresholds, updateThresholds } = useWeatherConfig()
+    const {
+        selectedProfile,
+        updateThresholds,
+        setSelectedProfile,
+        clearSelectedProfile,
+    } = useWeatherConfig()
     const { locationName } = useLocation()
 
     useEffect(() => {
@@ -113,7 +59,7 @@ export default function SettingsScreen() {
             const defaultThresholds =
                 await WeatherConfigService.resetToDefaults()
             setThresholds(defaultThresholds)
-            setSelectedDroneProfile(null)
+            await clearSelectedProfile()
             await updateThresholds(defaultThresholds)
             Alert.alert('Success', 'Weather thresholds reset to defaults')
         } catch (error) {
@@ -125,9 +71,8 @@ export default function SettingsScreen() {
 
     const handleDroneProfileSelect = async (profile: DroneProfile) => {
         try {
-            setSelectedDroneProfile(profile)
             setThresholds(profile.thresholds)
-            await updateThresholds(profile.thresholds)
+            await setSelectedProfile(profile)
             Alert.alert('Success', `Applied ${profile.name} profile settings`)
         } catch (error) {
             console.error('Error applying drone profile:', error)
@@ -149,13 +94,23 @@ export default function SettingsScreen() {
         }
         setThresholds(newThresholds)
         updateThresholds(newThresholds)
+
+        if (
+            selectedProfile &&
+            !thresholdsMatch(newThresholds, selectedProfile.thresholds)
+        ) {
+            clearSelectedProfile()
+        }
     }
 
     if (isLoading) {
         return (
-            <SafeAreaView className="flex-1 bg-gray-900">
+            <SafeAreaView className="flex-1 bg-background">
                 <View className="flex-1 justify-center items-center">
-                    <Text className="text-white text-lg">
+                    <Text
+                        className="text-slate-400 text-lg"
+                        style={{ fontFamily: 'DMSans' }}
+                    >
                         Loading settings...
                     </Text>
                 </View>
@@ -164,16 +119,19 @@ export default function SettingsScreen() {
     }
 
     return (
-        <SafeAreaView className="flex-1 bg-gray-900">
+        <SafeAreaView className="flex-1 bg-background">
             <LocationBar locationName={locationName || 'Select Location'} />
             <ScrollView className="flex-1 px-4 pt-4">
                 <DroneProfileSelector
-                    selectedProfile={selectedDroneProfile}
+                    selectedProfile={selectedProfile}
                     onSelectProfile={handleDroneProfileSelect}
                 />
 
                 <View className="mt-4 mb-2">
-                    <Text className="text-blue-400 text-lg mb-1">
+                    <Text
+                        className="text-amber-500 text-sm mb-1"
+                        style={{ fontFamily: 'Outfit-SemiBold' }}
+                    >
                         Temperature
                     </Text>
                     <SettingsSlider
@@ -206,7 +164,10 @@ export default function SettingsScreen() {
                 </View>
 
                 <View className="mb-2">
-                    <Text className="text-blue-400 text-lg mb-1">
+                    <Text
+                        className="text-amber-500 text-sm mb-1"
+                        style={{ fontFamily: 'Outfit-SemiBold' }}
+                    >
                         Wind Speed
                     </Text>
                     <SettingsSlider
@@ -238,7 +199,10 @@ export default function SettingsScreen() {
                 </View>
 
                 <View className="mb-2">
-                    <Text className="text-blue-400 text-lg mb-1">
+                    <Text
+                        className="text-amber-500 text-sm mb-1"
+                        style={{ fontFamily: 'Outfit-SemiBold' }}
+                    >
                         Visibility
                     </Text>
                     <SettingsSlider
@@ -260,18 +224,12 @@ export default function SettingsScreen() {
                 </View>
 
                 <View className="mb-2">
-                    <Text className="text-blue-400 text-lg mb-1">Weather</Text>
-                    <SettingsSlider
-                        icon="weather-cloudy"
-                        label="Maximum Cloud Cover"
-                        value={thresholds.weather.maxCloudCover}
-                        onValueChange={(value) =>
-                            handleValueChange('weather', 'maxCloudCover', value)
-                        }
-                        minimumValue={0}
-                        maximumValue={100}
-                        unit="%"
-                    />
+                    <Text
+                        className="text-amber-500 text-sm mb-1"
+                        style={{ fontFamily: 'Outfit-SemiBold' }}
+                    >
+                        Weather
+                    </Text>
                     <SettingsSlider
                         icon="weather-pouring"
                         label="Maximum Precipitation Probability"
@@ -291,15 +249,23 @@ export default function SettingsScreen() {
 
                 <View className="flex-row justify-center mb-6 mt-4">
                     <Pressable
-                        className="bg-red-600 px-6 py-4 rounded-lg flex-row items-center justify-center"
+                        className="px-6 py-3.5 rounded-xl flex-row items-center justify-center"
+                        style={{
+                            backgroundColor: 'rgba(127, 29, 29, 0.6)',
+                            borderWidth: 1,
+                            borderColor: 'rgba(239, 68, 68, 0.3)',
+                        }}
                         onPress={handleReset}
                     >
                         <MaterialCommunityIcons
                             name="refresh"
-                            size={24}
-                            color="white"
+                            size={20}
+                            color="#fca5a5"
                         />
-                        <Text className="text-white text-lg font-semibold ml-2">
+                        <Text
+                            className="text-red-200 text-base font-semibold ml-2"
+                            style={{ fontFamily: 'Outfit-SemiBold' }}
+                        >
                             Reset to Defaults
                         </Text>
                     </Pressable>
@@ -308,16 +274,3 @@ export default function SettingsScreen() {
         </SafeAreaView>
     )
 }
-
-const styles = StyleSheet.create({
-    headerImage: {
-        color: '#808080',
-        bottom: -90,
-        left: -35,
-        position: 'absolute',
-    },
-    titleContainer: {
-        flexDirection: 'row',
-        gap: 8,
-    },
-})

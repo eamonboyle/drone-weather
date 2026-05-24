@@ -8,7 +8,7 @@ export default function MapScreen() {
     const { locationName } = useLocation()
 
     return (
-        <SafeAreaView className="flex-1 bg-gray-900">
+        <SafeAreaView className="flex-1 bg-background">
             <LocationBar locationName={locationName} />
             <DroneMapView />
         </SafeAreaView>

@@ -48,6 +48,18 @@ function isCacheExpired(timestamp: number): boolean {
     return Date.now() - timestamp > CONFIG.CACHE_DURATION
 }
 
+function reviveWeatherData(data: WeatherData): WeatherData {
+    return {
+        hourlyData: data.hourlyData.map((hour) => ({
+            ...hour,
+            time:
+                hour.time instanceof Date
+                    ? hour.time
+                    : new Date(hour.time as string | number),
+        })),
+    }
+}
+
 function validateCache(
     cached: CachedWeatherData | null,
     latitude: number,
@@ -62,7 +74,10 @@ function validateCache(
 
     return {
         isValid: !isExpired && locationMatches,
-        data: !isExpired && locationMatches ? cached.data : undefined,
+        data:
+            !isExpired && locationMatches
+                ? reviveWeatherData(cached.data)
+                : undefined,
     }
 }
 
@@ -78,6 +93,28 @@ export class WeatherCacheService {
             return isValid ? data! : null
         } catch (error) {
             console.error('Error getting cached weather:', error)
+            return null
+        }
+    }
+
+    static async getLastCachedWeather(): Promise<{
+        data: WeatherData
+        latitude: number
+        longitude: number
+    } | null> {
+        try {
+            const cached = await readFromCache()
+            if (!cached || isCacheExpired(cached.timestamp)) {
+                return null
+            }
+
+            return {
+                data: reviveWeatherData(cached.data),
+                latitude: cached.latitude,
+                longitude: cached.longitude,
+            }
+        } catch (error) {
+            console.error('Error getting last cached weather:', error)
             return null
         }
     }

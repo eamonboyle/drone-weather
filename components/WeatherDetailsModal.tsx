@@ -1,11 +1,20 @@
 import React from 'react'
-import { View, Text, Modal, Pressable, ScrollView } from 'react-native'
+import {
+    View,
+    Text,
+    Modal,
+    Pressable,
+    ScrollView,
+    Platform,
+    StyleSheet,
+} from 'react-native'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { format } from 'date-fns'
 import { HourlyWeatherData } from '@/types/weather'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
-import { BlurView } from 'expo-blur'
 import { DroneFlyabilityService } from '@/services/droneFlyabilityService'
+import { convertSpeed, convertDistance } from '@/utils/unitConversion'
+import { API_WIND_UNIT } from '@/constants/weatherUnits'
 
 interface WeatherDetailsModalProps {
     isVisible: boolean
@@ -26,25 +35,31 @@ function DetailRow({
     icon,
     label,
     value,
-    color = '#60A5FA',
+    color = '#f59e0b',
     isSafe,
     subValues,
 }: DetailRowProps) {
     return (
-        <View className="py-3 border-b border-gray-700">
+        <View className="py-3 border-b border-white/5">
             <View className="flex-row items-center justify-between">
                 <View className="flex-row items-center flex-1">
                     <MaterialCommunityIcons
                         name={icon}
-                        size={24}
+                        size={22}
                         color={color}
                     />
-                    <Text className="text-gray-300 ml-3 text-base">
+                    <Text
+                        className="text-slate-400 ml-3 text-base"
+                        style={{ fontFamily: 'DMSans' }}
+                    >
                         {label}
                     </Text>
                 </View>
                 <View className="flex-row items-center">
-                    <Text className="text-white text-base font-medium">
+                    <Text
+                        className="text-slate-100 text-base font-medium"
+                        style={{ fontFamily: 'Outfit-SemiBold' }}
+                    >
                         {value}
                     </Text>
                     {isSafe !== undefined && (
@@ -59,9 +74,9 @@ function DetailRow({
                             size={20}
                             color={
                                 isSafe === 'warning'
-                                    ? '#fbbf24'
+                                    ? '#f59e0b'
                                     : isSafe
-                                      ? '#22c55e'
+                                      ? '#10b981'
                                       : '#ef4444'
                             }
                             style={{ marginLeft: 8 }}
@@ -76,11 +91,17 @@ function DetailRow({
                             key={index}
                             className="flex-row justify-between items-center py-1"
                         >
-                            <Text className="text-gray-400 text-sm">
+                            <Text
+                                className="text-slate-500 text-sm"
+                                style={{ fontFamily: 'DMSans' }}
+                            >
                                 {subValue.label}
                             </Text>
                             <View className="flex-row items-center">
-                                <Text className="text-gray-300 text-sm">
+                                <Text
+                                    className="text-slate-300 text-sm"
+                                    style={{ fontFamily: 'DMSans' }}
+                                >
                                     {subValue.value}
                                 </Text>
                                 {subValue.isSafe !== undefined && (
@@ -95,9 +116,9 @@ function DetailRow({
                                         size={16}
                                         color={
                                             subValue.isSafe === 'warning'
-                                                ? '#fbbf24'
+                                                ? '#f59e0b'
                                                 : subValue.isSafe
-                                                  ? '#22c55e'
+                                                  ? '#10b981'
                                                   : '#ef4444'
                                         }
                                         style={{ marginLeft: 8 }}
@@ -135,41 +156,48 @@ export function WeatherDetailsModal({
         hourData.temperature2m >= thresholds.temperature.min &&
         hourData.temperature2m <= thresholds.temperature.max
 
-    // Format wind speeds at different heights
-    const formatWindSpeed = (speed: number) =>
-        thresholds.windSpeed.unit === 'mph'
-            ? (speed * 0.621371).toFixed(1) + ' mph'
-            : speed.toFixed(1) + ' km/h'
+    const formatWindSpeed = (speedMph: number) => {
+        if (thresholds.windSpeed.unit === 'mph') {
+            return `${speedMph.toFixed(1)} mph`
+        }
+        return `${convertSpeed(speedMph, 'mph', 'kmh').toFixed(1)} km/h`
+    }
+
+    const windInThresholdUnit = (speedMph: number) =>
+        thresholds.windSpeed.unit === API_WIND_UNIT
+            ? speedMph
+            : convertSpeed(speedMph, 'mph', 'kmh')
 
     const windSpeedSubValues = flyabilityData.windSpeedDetails.map(
         (detail) => ({
             label: `At ${detail.height}`,
             value: formatWindSpeed(detail.speed),
-            isSafe: detail.speed <= thresholds.windSpeed.max,
+            isSafe:
+                windInThresholdUnit(detail.speed) <= thresholds.windSpeed.max,
         })
     )
 
     const windSpeed = formatWindSpeed(hourData.windSpeed10m)
     const windGust = formatWindSpeed(hourData.windGusts10m)
-    const isWindSafe =
-        hourData.windSpeed10m <= thresholds.windSpeed.max &&
-        hourData.windGusts10m <= thresholds.windGust.max
+    const isWindSpeedSafe =
+        windInThresholdUnit(hourData.windSpeed10m) <= thresholds.windSpeed.max
+    const isWindGustSafe =
+        windInThresholdUnit(hourData.windGusts10m) <= thresholds.windGust.max
 
-    // Convert and format visibility
-    const visibilityInKm = hourData.visibility
+    const visibilityKm = hourData.visibility / 1000
     const minVisibilityKm =
         thresholds.visibility.unit === 'miles'
-            ? thresholds.visibility.min * 1.60934 // Convert miles to km
+            ? convertDistance(
+                  thresholds.visibility.min,
+                  'miles',
+                  'kilometers'
+              )
             : thresholds.visibility.min
     const visibility =
         thresholds.visibility.unit === 'miles'
-            ? (visibilityInKm / 1.60934).toFixed(1) + ' mi'
-            : visibilityInKm.toFixed(1) + ' km'
-    const visibilityThreshold =
-        thresholds.visibility.unit === 'miles'
-            ? `${thresholds.visibility.min} mi`
-            : `${thresholds.visibility.min} km`
-    const isVisibilitySafe = visibilityInKm >= minVisibilityKm
+            ? `${convertDistance(visibilityKm, 'kilometers', 'miles').toFixed(1)} mi`
+            : `${visibilityKm.toFixed(1)} km`
+    const isVisibilitySafe = visibilityKm >= minVisibilityKm
 
     // Format precipitation and cloud cover
     const precipitation = `${hourData.precipitationProbability.toFixed(0)}%`
@@ -177,7 +205,6 @@ export function WeatherDetailsModal({
     const isPrecipSafe =
         hourData.precipitationProbability <=
         thresholds.weather.maxPrecipitationProbability
-    const isCloudSafe = hourData.cloudCover <= thresholds.weather.maxCloudCover
 
     return (
         <Modal
@@ -186,30 +213,50 @@ export function WeatherDetailsModal({
             animationType="fade"
             onRequestClose={onClose}
         >
-            <BlurView intensity={20} tint="dark" style={{ flex: 1 }}>
+            <Pressable
+                style={styles.backdrop}
+                onPress={onClose}
+            >
                 <Pressable
-                    className="flex-1 justify-center items-center p-4"
-                    onPress={onClose}
+                    style={styles.modalCard}
+                    onPress={(e) => e.stopPropagation()}
                 >
-                    <Pressable
-                        className="bg-gray-900 w-full max-w-md rounded-3xl overflow-hidden shadow-xl"
-                        onPress={(e) => e.stopPropagation()}
-                    >
                         {/* Header */}
-                        <View className="px-6 py-4 bg-gray-800">
-                            <Text className="text-white text-2xl font-bold">
+                        <View
+                            className="px-6 py-4 border-b"
+                            style={{
+                                backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                                borderBottomColor: 'rgba(245, 158, 11, 0.25)',
+                                borderBottomWidth: 1,
+                            }}
+                        >
+                            <Text
+                                className="text-slate-100 text-xl font-bold"
+                                style={{ fontFamily: 'Outfit-SemiBold' }}
+                            >
                                 {format(hourData.time, 'EEEE, MMMM d')}
                             </Text>
-                            <Text className="text-gray-400 text-lg mt-1">
+                            <Text
+                                className="text-slate-500 text-base mt-1"
+                                style={{ fontFamily: 'DMSans' }}
+                            >
                                 {format(hourData.time, 'h:mm a')}
                             </Text>
                         </View>
 
                         {/* Content */}
                         <ScrollView className="px-6 py-4">
-                            {/* {flyabilityData.reasons.length > 0 && (
-                                <View className="mb-4 p-3 bg-red-900/30 rounded-lg">
-                                    <Text className="text-red-400 font-semibold mb-1">
+                            {flyabilityData.reasons.length > 0 && (
+                                <View
+                                    className="mb-4 p-3 rounded-lg"
+                                    style={{
+                                        backgroundColor: 'rgba(127, 29, 29, 0.35)',
+                                    }}
+                                >
+                                    <Text
+                                        className="text-red-400 font-semibold mb-1"
+                                        style={{ fontFamily: 'Outfit-SemiBold' }}
+                                    >
                                         Unsafe Conditions:
                                     </Text>
                                     {flyabilityData.reasons.map(
@@ -217,13 +264,14 @@ export function WeatherDetailsModal({
                                             <Text
                                                 key={index}
                                                 className="text-red-300"
+                                                style={{ fontFamily: 'DMSans' }}
                                             >
                                                 • {reason}
                                             </Text>
                                         )
                                     )}
                                 </View>
-                            )} */}
+                            )}
                             <DetailRow
                                 icon="thermometer"
                                 label="Temperature"
@@ -234,14 +282,14 @@ export function WeatherDetailsModal({
                                 icon="weather-windy"
                                 label="Wind Speed"
                                 value={windSpeed}
-                                isSafe={isWindSafe}
+                                isSafe={isWindSpeedSafe}
                                 subValues={windSpeedSubValues}
                             />
                             <DetailRow
                                 icon="weather-windy-variant"
                                 label="Wind Gusts"
                                 value={windGust}
-                                isSafe={isWindSafe}
+                                isSafe={isWindGustSafe}
                             />
                             <DetailRow
                                 icon="eye"
@@ -259,24 +307,60 @@ export function WeatherDetailsModal({
                                 icon="weather-cloudy"
                                 label="Cloud Cover"
                                 value={cloudCover}
-                                isSafe={isCloudSafe ? true : 'warning'}
                             />
                         </ScrollView>
 
                         {/* Close Button */}
-                        <View className="px-6 py-4 border-t border-gray-800">
+                        <View className="px-6 py-4 border-t border-white/5">
                             <Pressable
                                 onPress={onClose}
-                                className="bg-blue-600 py-3 rounded-xl items-center"
+                                className="py-3.5 rounded-xl items-center"
+                                style={{
+                                    backgroundColor: 'rgba(245, 158, 11, 0.25)',
+                                    borderWidth: 1,
+                                    borderColor: 'rgba(245, 158, 11, 0.4)',
+                                }}
                             >
-                                <Text className="text-white text-base font-semibold">
+                                <Text
+                                    className="text-amber-300 text-base font-semibold"
+                                    style={{ fontFamily: 'Outfit-SemiBold' }}
+                                >
                                     Close
                                 </Text>
                             </Pressable>
                         </View>
                     </Pressable>
-                </Pressable>
-            </BlurView>
+            </Pressable>
         </Modal>
     )
 }
+
+const styles = StyleSheet.create({
+    backdrop: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    },
+    modalCard: {
+        width: '100%',
+        maxWidth: 400,
+        borderRadius: 20,
+        overflow: 'hidden',
+        backgroundColor: '#1a1f28',
+        borderWidth: 2,
+        borderColor: 'rgba(245, 158, 11, 0.6)',
+        ...Platform.select({
+            ios: {
+                shadowColor: '#f59e0b',
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.25,
+                shadowRadius: 24,
+            },
+            android: {
+                elevation: 24,
+            },
+        }),
+    },
+})

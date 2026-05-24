@@ -14,6 +14,7 @@ interface StorageOperationResult<T> {
 // Constants
 const CONFIG = {
     STORAGE_KEY: 'weather_thresholds',
+    PROFILE_ID_KEY: 'selected_drone_profile_id',
 } as const
 
 // Helper Functions
@@ -156,7 +157,30 @@ export class WeatherConfigService {
 
     static async resetToDefaults(): Promise<WeatherThresholds> {
         await this.saveThresholds(DEFAULT_WEATHER_THRESHOLDS)
+        await this.saveSelectedProfileId(null)
         return DEFAULT_WEATHER_THRESHOLDS
+    }
+
+    static async getSelectedProfileId(): Promise<string | null> {
+        try {
+            return await AsyncStorage.getItem(CONFIG.PROFILE_ID_KEY)
+        } catch (error) {
+            console.error('Error reading selected drone profile:', error)
+            return null
+        }
+    }
+
+    static async saveSelectedProfileId(id: string | null): Promise<void> {
+        try {
+            if (id === null) {
+                await AsyncStorage.removeItem(CONFIG.PROFILE_ID_KEY)
+                return
+            }
+            await AsyncStorage.setItem(CONFIG.PROFILE_ID_KEY, id)
+        } catch (error) {
+            console.error('Error saving selected drone profile:', error)
+            throw new Error('Failed to save selected drone profile')
+        }
     }
 
     static async validateThresholds(

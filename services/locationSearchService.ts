@@ -35,7 +35,7 @@ interface OpenCageResponse {
 // Constants
 const CONFIG = {
     API_KEY: Constants.expoConfig?.extra?.opencageApiKey,
-    SEARCH_LIMIT: 5,
+    SEARCH_LIMIT: 8,
 } as const
 
 // Helper Functions

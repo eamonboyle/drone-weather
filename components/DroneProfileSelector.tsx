@@ -6,10 +6,14 @@ import {
     Pressable,
     Modal,
     ScrollView,
-    StyleSheet,
+    TextInput,
 } from 'react-native'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
-import { DroneProfile, DRONE_PROFILES } from '@/types/droneProfiles'
+import {
+    DroneProfile,
+    DRONE_PROFILES,
+    sortProfilesByReleaseYear,
+} from '@/types/droneProfiles'
 
 interface DroneProfileSelectorProps {
     selectedProfile: DroneProfile | null
@@ -21,41 +25,83 @@ export function DroneProfileSelector({
     onSelectProfile,
 }: DroneProfileSelectorProps) {
     const [isModalVisible, setIsModalVisible] = React.useState(false)
+    const [searchQuery, setSearchQuery] = React.useState('')
+
+    const sortedProfiles = React.useMemo(
+        () => sortProfilesByReleaseYear(DRONE_PROFILES),
+        []
+    )
+
+    const filteredProfiles = React.useMemo(() => {
+        const query = searchQuery.trim().toLowerCase()
+        if (!query) return sortedProfiles
+        return sortedProfiles.filter(
+            (profile) =>
+                profile.name.toLowerCase().includes(query) ||
+                profile.manufacturer.toLowerCase().includes(query) ||
+                profile.model.toLowerCase().includes(query)
+        )
+    }, [searchQuery, sortedProfiles])
+
+    const handleClose = () => {
+        setIsModalVisible(false)
+        setSearchQuery('')
+    }
 
     return (
         <View className="mb-6">
-            <Text className="text-blue-400 text-lg mb-2">Drone Profile</Text>
+            <Text
+                className="text-amber-500 text-sm mb-2"
+                style={{ fontFamily: 'Outfit-SemiBold' }}
+            >
+                Drone Profile
+            </Text>
 
             <Pressable
                 onPress={() => setIsModalVisible(true)}
-                className="bg-gray-800/50 rounded-lg p-4 flex-row items-center justify-between"
+                className="rounded-xl p-4 flex-row items-center justify-between"
+                style={{
+                    backgroundColor: 'rgba(22, 26, 32, 0.6)',
+                    borderWidth: 1,
+                    borderColor: 'rgba(255, 255, 255, 0.06)',
+                }}
             >
                 {selectedProfile ? (
                     <View className="flex-row items-center flex-1">
                         {selectedProfile.imageUrl && (
                             <Image
                                 source={{ uri: selectedProfile.imageUrl }}
-                                className="w-12 h-12 rounded-md mr-3"
+                                className="w-12 h-12 rounded-lg mr-3"
                             />
                         )}
                         <View className="flex-1">
-                            <Text className="text-white text-lg font-semibold">
+                            <Text
+                                className="text-slate-100 text-base font-semibold"
+                                style={{ fontFamily: 'Outfit-SemiBold' }}
+                            >
                                 {selectedProfile.name}
                             </Text>
-                            <Text className="text-gray-400">
-                                {selectedProfile.manufacturer}
+                            <Text
+                                className="text-slate-500 text-sm"
+                                style={{ fontFamily: 'DMSans' }}
+                            >
+                                {selectedProfile.manufacturer} ·{' '}
+                                {selectedProfile.releaseYear}
                             </Text>
                         </View>
                     </View>
                 ) : (
-                    <Text className="text-gray-400 text-lg">
+                    <Text
+                        className="text-slate-500 text-base"
+                        style={{ fontFamily: 'DMSans' }}
+                    >
                         Select a drone profile
                     </Text>
                 )}
                 <MaterialCommunityIcons
                     name="chevron-right"
-                    size={24}
-                    color="#60A5FA"
+                    size={22}
+                    color="#f59e0b"
                 />
             </Pressable>
 
@@ -63,91 +109,149 @@ export function DroneProfileSelector({
                 visible={isModalVisible}
                 animationType="slide"
                 transparent={true}
-                onRequestClose={() => setIsModalVisible(false)}
+                onRequestClose={handleClose}
             >
-                <View className="flex-1 bg-black/50">
-                    <View className="flex-1 mt-24 bg-gray-900 rounded-t-3xl">
-                        <View className="p-4 border-b border-gray-800 flex-row justify-between items-center">
-                            <Text className="text-white text-xl font-semibold">
+                <View className="flex-1 bg-black/60">
+                    <View
+                        className="flex-1 mt-24 rounded-t-3xl"
+                        style={{ backgroundColor: '#0f1115' }}
+                    >
+                        <View className="p-4 border-b border-white/5 flex-row justify-between items-center">
+                            <Text
+                                className="text-slate-100 text-lg font-semibold"
+                                style={{ fontFamily: 'Outfit-SemiBold' }}
+                            >
                                 Select Drone Profile
                             </Text>
-                            <Pressable
-                                onPress={() => setIsModalVisible(false)}
-                                className="p-2"
-                            >
+                            <Pressable onPress={handleClose} className="p-2">
                                 <MaterialCommunityIcons
                                     name="close"
-                                    size={24}
-                                    color="#60A5FA"
+                                    size={22}
+                                    color="#f59e0b"
                                 />
                             </Pressable>
                         </View>
 
+                        <View className="px-4 pt-3 pb-2">
+                            <TextInput
+                                className="h-11 px-4 text-slate-100 rounded-xl"
+                                style={{
+                                    backgroundColor: 'rgba(22, 26, 32, 0.8)',
+                                    fontFamily: 'DMSans',
+                                }}
+                                placeholder="Search by name or manufacturer..."
+                                placeholderTextColor="#64748b"
+                                value={searchQuery}
+                                onChangeText={setSearchQuery}
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                            />
+                        </View>
+
                         <ScrollView className="flex-1 p-4">
-                            {DRONE_PROFILES.map((profile) => (
-                                <Pressable
-                                    key={profile.id}
-                                    onPress={() => {
-                                        onSelectProfile(profile)
-                                        setIsModalVisible(false)
-                                    }}
-                                    className={`bg-gray-800/50 rounded-lg p-4 mb-3 flex-row items-center ${
-                                        selectedProfile?.id === profile.id
-                                            ? 'border border-blue-500'
-                                            : ''
-                                    }`}
+                            {filteredProfiles.length === 0 ? (
+                                <Text
+                                    className="text-slate-500 text-center py-8"
+                                    style={{ fontFamily: 'DMSans' }}
                                 >
-                                    {profile.imageUrl && (
-                                        <Image
-                                            source={{ uri: profile.imageUrl }}
-                                            className="w-16 h-16 rounded-md mr-4"
-                                        />
-                                    )}
-                                    <View className="flex-1">
-                                        <Text className="text-white text-lg font-semibold">
-                                            {profile.name}
-                                        </Text>
-                                        <Text className="text-gray-400">
-                                            {profile.manufacturer} •{' '}
-                                            {profile.model}
-                                        </Text>
-                                        <View className="flex-row mt-2">
-                                            <Text className="text-gray-400 text-sm">
-                                                Max Wind:{' '}
-                                                {
-                                                    profile.thresholds.windSpeed
-                                                        .max
-                                                }{' '}
-                                                {
-                                                    profile.thresholds.windSpeed
-                                                        .unit
-                                                }
+                                    No profiles match your search
+                                </Text>
+                            ) : (
+                                filteredProfiles.map((profile) => (
+                                    <Pressable
+                                        key={profile.id}
+                                        onPress={() => {
+                                            onSelectProfile(profile)
+                                            handleClose()
+                                        }}
+                                        className="rounded-xl p-4 mb-3 flex-row items-center"
+                                        style={{
+                                            backgroundColor:
+                                                selectedProfile?.id ===
+                                                profile.id
+                                                    ? 'rgba(245, 158, 11, 0.15)'
+                                                    : 'rgba(22, 26, 32, 0.6)',
+                                            borderWidth: 1,
+                                            borderColor:
+                                                selectedProfile?.id ===
+                                                profile.id
+                                                    ? 'rgba(245, 158, 11, 0.4)'
+                                                    : 'rgba(255, 255, 255, 0.06)',
+                                        }}
+                                    >
+                                        {profile.imageUrl && (
+                                            <Image
+                                                source={{
+                                                    uri: profile.imageUrl,
+                                                }}
+                                                className="w-16 h-16 rounded-lg mr-4"
+                                            />
+                                        )}
+                                        <View className="flex-1">
+                                            <Text
+                                                className="text-slate-100 text-base font-semibold"
+                                                style={{
+                                                    fontFamily:
+                                                        'Outfit-SemiBold',
+                                                }}
+                                            >
+                                                {profile.name}
                                             </Text>
-                                            <Text className="text-gray-400 text-sm ml-4">
-                                                Temp Range:{' '}
-                                                {
-                                                    profile.thresholds
-                                                        .temperature.min
-                                                }
-                                                ° -
-                                                {
-                                                    profile.thresholds
-                                                        .temperature.max
-                                                }
-                                                °
+                                            <Text
+                                                className="text-slate-500 text-sm"
+                                                style={{
+                                                    fontFamily: 'DMSans',
+                                                }}
+                                            >
+                                                {profile.manufacturer} ·{' '}
+                                                {profile.releaseYear}
                                             </Text>
+                                            <View className="flex-row mt-2">
+                                                <Text
+                                                    className="text-slate-500 text-xs"
+                                                    style={{
+                                                        fontFamily: 'DMSans',
+                                                    }}
+                                                >
+                                                    {
+                                                        profile.thresholds
+                                                            .windSpeed.max
+                                                    }{' '}
+                                                    {
+                                                        profile.thresholds
+                                                            .windSpeed.unit
+                                                    }{' '}
+                                                    max wind
+                                                </Text>
+                                                <Text
+                                                    className="text-slate-500 text-xs ml-4"
+                                                    style={{
+                                                        fontFamily: 'DMSans',
+                                                    }}
+                                                >
+                                                    {
+                                                        profile.thresholds
+                                                            .temperature.min
+                                                    }
+                                                    ° to{' '}
+                                                    {
+                                                        profile.thresholds
+                                                            .temperature.max
+                                                    }
+                                                    °C
+                                                </Text>
+                                            </View>
                                         </View>
-                                    </View>
-                                    {selectedProfile?.id === profile.id && (
-                                        <MaterialCommunityIcons
-                                            name="check-circle"
-                                            size={24}
-                                            color="#60A5FA"
-                                            className="ml-2"
-                                        />
-                                    )}
-                                </Pressable>
-                            ))}
+                                        {selectedProfile?.id === profile.id && (
+                                            <MaterialCommunityIcons
+                                                name="check-circle"
+                                                size={22}
+                                                color="#f59e0b"
+                                            />
+                                        )}
+                                    </Pressable>
+                                ))
+                            )}
                         </ScrollView>
                     </View>
                 </View>

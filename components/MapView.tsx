@@ -28,7 +28,7 @@ const styles = StyleSheet.create({
         flex: 1,
         overflow: 'hidden',
         borderRadius: 16,
-        backgroundColor: '#1f2937',
+        backgroundColor: '#0f1115',
     },
     map: {
         flex: 1,

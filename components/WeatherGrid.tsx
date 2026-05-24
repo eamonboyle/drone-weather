@@ -4,14 +4,14 @@ import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useState, useEffect } from 'react'
 import { WindDataPopup } from './WindDataPopup'
 import { WeatherService } from '@/services/weatherService'
-import { WeatherConfigService } from '@/services/weatherConfigService'
-import { WeatherThresholds } from '@/types/weatherConfig'
-import React from 'react'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
+import { findHourlyDataForClockHour } from '@/utils/weatherHourUtils'
+import { convertSpeed } from '@/utils/unitConversion'
+import { API_WIND_UNIT } from '@/constants/weatherUnits'
 
 interface WeatherGridProps {
     weatherData: WeatherData
-    hourIndex: number
+    selectedClockHour: number
 }
 
 interface WindPopupState {
@@ -22,7 +22,7 @@ interface WindPopupState {
     type: 'speed' | 'gusts'
 }
 
-export function WeatherGrid({ weatherData, hourIndex }: WeatherGridProps) {
+export function WeatherGrid({ weatherData, selectedClockHour }: WeatherGridProps) {
     const [windPopupState, setWindPopupState] = useState<WindPopupState>({
         isVisible: false,
         data: [],
@@ -40,13 +40,13 @@ export function WeatherGrid({ weatherData, hourIndex }: WeatherGridProps) {
 
     useEffect(() => {
         loadFlyability()
-    }, [weatherData, hourIndex, thresholds])
+    }, [weatherData, selectedClockHour, thresholds])
 
     const loadFlyability = async () => {
         try {
             const flyability = await WeatherService.isDroneFlyable(
                 weatherData,
-                hourIndex
+                selectedClockHour
             )
             setFlyabilityData(flyability)
         } catch (error) {
@@ -78,25 +78,41 @@ export function WeatherGrid({ weatherData, hourIndex }: WeatherGridProps) {
         })
     }
 
+    function windInThresholdUnit(speedMph: number): number {
+        if (thresholds.windSpeed.unit === API_WIND_UNIT) return speedMph
+        return convertSpeed(speedMph, 'mph', 'kmh')
+    }
+
+    function formatWind(speedMph: number): string {
+        if (thresholds.windSpeed.unit === 'mph') {
+            return `${speedMph.toFixed(1)} mph`
+        }
+        return `${convertSpeed(speedMph, 'mph', 'kmh').toFixed(1)} km/h`
+    }
+
     // Helper function to determine if a specific weather parameter is within acceptable range
     function isParameterSafe(
         parameter: string,
         value: number
-    ): 'safe' | 'warning' | 'unsafe' {
+    ): 'safe' | 'warning' | 'unsafe' | 'neutral' {
         if (!thresholds) return 'unsafe'
 
         switch (parameter) {
             case 'Wind Speed':
-                return value <= thresholds.windSpeed.max ? 'safe' : 'unsafe'
+                return windInThresholdUnit(value) <= thresholds.windSpeed.max
+                    ? 'safe'
+                    : 'unsafe'
+            case 'Wind Gusts':
+                return windInThresholdUnit(value) <= thresholds.windGust.max
+                    ? 'safe'
+                    : 'unsafe'
             case 'Temperature':
                 return value >= thresholds.temperature.min &&
                     value <= thresholds.temperature.max
                     ? 'safe'
                     : 'unsafe'
             case 'Cloud Cover':
-                return value <= thresholds.weather.maxCloudCover
-                    ? 'safe'
-                    : 'warning'
+                return 'neutral'
             case 'Visibility':
                 return value >= thresholds.visibility.min * 1000
                     ? 'safe'
@@ -124,7 +140,42 @@ export function WeatherGrid({ weatherData, hourIndex }: WeatherGridProps) {
         )
     }
 
-    const hourData = weatherData.hourlyData[hourIndex]
+    const hourData = findHourlyDataForClockHour(
+        weatherData.hourlyData,
+        selectedClockHour
+    )
+
+    if (!hourData) {
+        return (
+            <View className="flex-1 justify-center items-center">
+                <Text className="text-white text-lg">
+                    No weather data for selected hour
+                </Text>
+            </View>
+        )
+    }
+
+    const getCardStyles = (safety: 'safe' | 'warning' | 'unsafe' | 'neutral') => {
+        if (safety === 'neutral') {
+            return {
+                borderColor: 'rgba(255, 255, 255, 0.08)',
+                backgroundColor: 'rgba(22, 26, 32, 0.6)',
+            }
+        }
+        const borderColor =
+            safety === 'safe'
+                ? 'rgba(16, 185, 129, 0.35)'
+                : safety === 'warning'
+                  ? 'rgba(245, 158, 11, 0.35)'
+                  : 'rgba(239, 68, 68, 0.35)'
+        const backgroundColor =
+            safety === 'safe'
+                ? 'rgba(6, 95, 70, 0.4)'
+                : safety === 'warning'
+                  ? 'rgba(120, 53, 15, 0.35)'
+                  : 'rgba(127, 29, 29, 0.4)'
+        return { borderColor, backgroundColor }
+    }
 
     const weatherItems = [
         {
@@ -138,20 +189,14 @@ export function WeatherGrid({ weatherData, hourIndex }: WeatherGridProps) {
         },
         {
             label: 'Wind Speed',
-            value:
-                thresholds.windSpeed.unit === 'mph'
-                    ? `${(hourData.windSpeed10m * 0.621371).toFixed(1)} mph`
-                    : `${hourData.windSpeed10m.toFixed(1)} km/h`,
+            value: formatWind(hourData.windSpeed10m),
             numericValue: hourData.windSpeed10m,
             icon: 'weather-windy',
             onPress: () => handleWindPress('speed'),
         },
         {
             label: 'Wind Gusts',
-            value:
-                thresholds.windSpeed.unit === 'mph'
-                    ? `${(hourData.windGusts10m * 0.621371).toFixed(1)} mph`
-                    : `${hourData.windGusts10m.toFixed(1)} km/h`,
+            value: formatWind(hourData.windGusts10m),
             numericValue: hourData.windGusts10m,
             icon: 'weather-windy-variant',
             onPress: () => handleWindPress('gusts'),
@@ -199,18 +244,21 @@ export function WeatherGrid({ weatherData, hourIndex }: WeatherGridProps) {
 
     return (
         <>
-            <View className="flex-row flex-wrap gap-2">
+            <View className="flex-row flex-wrap gap-3">
                 {weatherItems.map((item) => {
                     const safety = isParameterSafe(
                         item.label,
                         item.numericValue
                     )
-                    const bgColor =
-                        safety === 'safe'
-                            ? 'bg-green-800'
-                            : safety === 'warning'
-                              ? 'bg-yellow-700'
-                              : 'bg-red-800'
+                    const cardStyles = getCardStyles(safety)
+                    const iconColor =
+                        safety === 'neutral'
+                            ? '#94a3b8'
+                            : safety === 'safe'
+                              ? '#10b981'
+                              : safety === 'warning'
+                                ? '#f59e0b'
+                                : '#ef4444'
 
                     const handlePress = () => {
                         if (item.label === 'Wind Speed') {
@@ -224,20 +272,30 @@ export function WeatherGrid({ weatherData, hourIndex }: WeatherGridProps) {
                         <Pressable
                             key={item.label}
                             onPress={handlePress}
-                            className={`p-4 rounded-lg flex-1 min-w-[30%] ${bgColor}`}
+                            className="p-4 flex-1 min-w-[30%] rounded-xl overflow-hidden"
+                            style={{
+                                borderWidth: 1,
+                                borderColor: cardStyles.borderColor,
+                                backgroundColor: cardStyles.backgroundColor,
+                            }}
                         >
                             <View className="items-center">
                                 <MaterialCommunityIcons
                                     name={item.icon as any}
-                                    size={24}
-                                    color="white"
-                                    style={{ opacity: 0.75 }}
+                                    size={22}
+                                    color={iconColor}
                                 />
-                                <Text className="text-white text-sm opacity-75 mt-1">
+                                <Text
+                                    className="text-slate-400 text-xs mt-1.5"
+                                    style={{ fontFamily: 'DMSans' }}
+                                >
                                     {item.label}
                                 </Text>
                             </View>
-                            <Text className="text-white text-lg font-semibold mt-2 text-center">
+                            <Text
+                                className="text-white text-base font-semibold mt-2 text-center"
+                                style={{ fontFamily: 'Outfit-SemiBold' }}
+                            >
                                 {item.value}
                             </Text>
                         </Pressable>

@@ -8,9 +8,18 @@ module.exports = {
     theme: {
         extend: {
             colors: {
-                safe: '#22c55e', // green-500
-                warning: '#eab308', // yellow-500
-                danger: '#ef4444', // red-500
+                // Aviation theme
+                background: '#08090c',
+                surface: '#0f1115',
+                surfaceElevated: '#161a20',
+                accent: '#f59e0b',
+                safe: '#10b981',
+                warning: '#f59e0b',
+                danger: '#ef4444',
+            },
+            fontFamily: {
+                display: ['Outfit'],
+                body: ['DMSans'],
             },
         },
     },
