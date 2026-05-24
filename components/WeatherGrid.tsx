@@ -4,14 +4,14 @@ import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useState, useEffect } from 'react'
 import { WindDataPopup } from './WindDataPopup'
 import { WeatherService } from '@/services/weatherService'
-import { WeatherConfigService } from '@/services/weatherConfigService'
-import { WeatherThresholds } from '@/types/weatherConfig'
-import React from 'react'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
+import { findHourlyDataForClockHour } from '@/utils/weatherHourUtils'
+import { convertSpeed } from '@/utils/unitConversion'
+import { API_WIND_UNIT } from '@/constants/weatherUnits'
 
 interface WeatherGridProps {
     weatherData: WeatherData
-    hourIndex: number
+    selectedClockHour: number
 }
 
 interface WindPopupState {
@@ -22,7 +22,7 @@ interface WindPopupState {
     type: 'speed' | 'gusts'
 }
 
-export function WeatherGrid({ weatherData, hourIndex }: WeatherGridProps) {
+export function WeatherGrid({ weatherData, selectedClockHour }: WeatherGridProps) {
     const [windPopupState, setWindPopupState] = useState<WindPopupState>({
         isVisible: false,
         data: [],
@@ -40,13 +40,13 @@ export function WeatherGrid({ weatherData, hourIndex }: WeatherGridProps) {
 
     useEffect(() => {
         loadFlyability()
-    }, [weatherData, hourIndex, thresholds])
+    }, [weatherData, selectedClockHour, thresholds])
 
     const loadFlyability = async () => {
         try {
             const flyability = await WeatherService.isDroneFlyable(
                 weatherData,
-                hourIndex
+                selectedClockHour
             )
             setFlyabilityData(flyability)
         } catch (error) {
@@ -78,6 +78,18 @@ export function WeatherGrid({ weatherData, hourIndex }: WeatherGridProps) {
         })
     }
 
+    function windInThresholdUnit(speedMph: number): number {
+        if (thresholds.windSpeed.unit === API_WIND_UNIT) return speedMph
+        return convertSpeed(speedMph, 'mph', 'kmh')
+    }
+
+    function formatWind(speedMph: number): string {
+        if (thresholds.windSpeed.unit === 'mph') {
+            return `${speedMph.toFixed(1)} mph`
+        }
+        return `${convertSpeed(speedMph, 'mph', 'kmh').toFixed(1)} km/h`
+    }
+
     // Helper function to determine if a specific weather parameter is within acceptable range
     function isParameterSafe(
         parameter: string,
@@ -87,7 +99,13 @@ export function WeatherGrid({ weatherData, hourIndex }: WeatherGridProps) {
 
         switch (parameter) {
             case 'Wind Speed':
-                return value <= thresholds.windSpeed.max ? 'safe' : 'unsafe'
+                return windInThresholdUnit(value) <= thresholds.windSpeed.max
+                    ? 'safe'
+                    : 'unsafe'
+            case 'Wind Gusts':
+                return windInThresholdUnit(value) <= thresholds.windGust.max
+                    ? 'safe'
+                    : 'unsafe'
             case 'Temperature':
                 return value >= thresholds.temperature.min &&
                     value <= thresholds.temperature.max
@@ -124,7 +142,20 @@ export function WeatherGrid({ weatherData, hourIndex }: WeatherGridProps) {
         )
     }
 
-    const hourData = weatherData.hourlyData[hourIndex]
+    const hourData = findHourlyDataForClockHour(
+        weatherData.hourlyData,
+        selectedClockHour
+    )
+
+    if (!hourData) {
+        return (
+            <View className="flex-1 justify-center items-center">
+                <Text className="text-white text-lg">
+                    No weather data for selected hour
+                </Text>
+            </View>
+        )
+    }
 
     const getCardStyles = (safety: 'safe' | 'warning' | 'unsafe') => {
         const borderColor =
@@ -154,20 +185,14 @@ export function WeatherGrid({ weatherData, hourIndex }: WeatherGridProps) {
         },
         {
             label: 'Wind Speed',
-            value:
-                thresholds.windSpeed.unit === 'mph'
-                    ? `${(hourData.windSpeed10m * 0.621371).toFixed(1)} mph`
-                    : `${hourData.windSpeed10m.toFixed(1)} km/h`,
+            value: formatWind(hourData.windSpeed10m),
             numericValue: hourData.windSpeed10m,
             icon: 'weather-windy',
             onPress: () => handleWindPress('speed'),
         },
         {
             label: 'Wind Gusts',
-            value:
-                thresholds.windSpeed.unit === 'mph'
-                    ? `${(hourData.windGusts10m * 0.621371).toFixed(1)} mph`
-                    : `${hourData.windGusts10m.toFixed(1)} km/h`,
+            value: formatWind(hourData.windGusts10m),
             numericValue: hourData.windGusts10m,
             icon: 'weather-windy-variant',
             onPress: () => handleWindPress('gusts'),

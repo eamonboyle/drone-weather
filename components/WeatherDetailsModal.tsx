@@ -13,6 +13,8 @@ import { format } from 'date-fns'
 import { HourlyWeatherData } from '@/types/weather'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
 import { DroneFlyabilityService } from '@/services/droneFlyabilityService'
+import { convertSpeed, convertDistance } from '@/utils/unitConversion'
+import { API_WIND_UNIT } from '@/constants/weatherUnits'
 
 interface WeatherDetailsModalProps {
     isVisible: boolean
@@ -154,41 +156,48 @@ export function WeatherDetailsModal({
         hourData.temperature2m >= thresholds.temperature.min &&
         hourData.temperature2m <= thresholds.temperature.max
 
-    // Format wind speeds at different heights
-    const formatWindSpeed = (speed: number) =>
-        thresholds.windSpeed.unit === 'mph'
-            ? (speed * 0.621371).toFixed(1) + ' mph'
-            : speed.toFixed(1) + ' km/h'
+    const formatWindSpeed = (speedMph: number) => {
+        if (thresholds.windSpeed.unit === 'mph') {
+            return `${speedMph.toFixed(1)} mph`
+        }
+        return `${convertSpeed(speedMph, 'mph', 'kmh').toFixed(1)} km/h`
+    }
+
+    const windInThresholdUnit = (speedMph: number) =>
+        thresholds.windSpeed.unit === API_WIND_UNIT
+            ? speedMph
+            : convertSpeed(speedMph, 'mph', 'kmh')
 
     const windSpeedSubValues = flyabilityData.windSpeedDetails.map(
         (detail) => ({
             label: `At ${detail.height}`,
             value: formatWindSpeed(detail.speed),
-            isSafe: detail.speed <= thresholds.windSpeed.max,
+            isSafe:
+                windInThresholdUnit(detail.speed) <= thresholds.windSpeed.max,
         })
     )
 
     const windSpeed = formatWindSpeed(hourData.windSpeed10m)
     const windGust = formatWindSpeed(hourData.windGusts10m)
-    const isWindSafe =
-        hourData.windSpeed10m <= thresholds.windSpeed.max &&
-        hourData.windGusts10m <= thresholds.windGust.max
+    const isWindSpeedSafe =
+        windInThresholdUnit(hourData.windSpeed10m) <= thresholds.windSpeed.max
+    const isWindGustSafe =
+        windInThresholdUnit(hourData.windGusts10m) <= thresholds.windGust.max
 
-    // Convert and format visibility
-    const visibilityInKm = hourData.visibility
+    const visibilityKm = hourData.visibility / 1000
     const minVisibilityKm =
         thresholds.visibility.unit === 'miles'
-            ? thresholds.visibility.min * 1.60934 // Convert miles to km
+            ? convertDistance(
+                  thresholds.visibility.min,
+                  'miles',
+                  'kilometers'
+              )
             : thresholds.visibility.min
     const visibility =
         thresholds.visibility.unit === 'miles'
-            ? (visibilityInKm / 1.60934).toFixed(1) + ' mi'
-            : visibilityInKm.toFixed(1) + ' km'
-    const visibilityThreshold =
-        thresholds.visibility.unit === 'miles'
-            ? `${thresholds.visibility.min} mi`
-            : `${thresholds.visibility.min} km`
-    const isVisibilitySafe = visibilityInKm >= minVisibilityKm
+            ? `${convertDistance(visibilityKm, 'kilometers', 'miles').toFixed(1)} mi`
+            : `${visibilityKm.toFixed(1)} km`
+    const isVisibilitySafe = visibilityKm >= minVisibilityKm
 
     // Format precipitation and cloud cover
     const precipitation = `${hourData.precipitationProbability.toFixed(0)}%`
@@ -238,9 +247,17 @@ export function WeatherDetailsModal({
 
                         {/* Content */}
                         <ScrollView className="px-6 py-4">
-                            {/* {flyabilityData.reasons.length > 0 && (
-                                <View className="mb-4 p-3 bg-red-900/30 rounded-lg">
-                                    <Text className="text-red-400 font-semibold mb-1">
+                            {flyabilityData.reasons.length > 0 && (
+                                <View
+                                    className="mb-4 p-3 rounded-lg"
+                                    style={{
+                                        backgroundColor: 'rgba(127, 29, 29, 0.35)',
+                                    }}
+                                >
+                                    <Text
+                                        className="text-red-400 font-semibold mb-1"
+                                        style={{ fontFamily: 'Outfit-SemiBold' }}
+                                    >
                                         Unsafe Conditions:
                                     </Text>
                                     {flyabilityData.reasons.map(
@@ -248,13 +265,14 @@ export function WeatherDetailsModal({
                                             <Text
                                                 key={index}
                                                 className="text-red-300"
+                                                style={{ fontFamily: 'DMSans' }}
                                             >
                                                 • {reason}
                                             </Text>
                                         )
                                     )}
                                 </View>
-                            )} */}
+                            )}
                             <DetailRow
                                 icon="thermometer"
                                 label="Temperature"
@@ -265,14 +283,14 @@ export function WeatherDetailsModal({
                                 icon="weather-windy"
                                 label="Wind Speed"
                                 value={windSpeed}
-                                isSafe={isWindSafe}
+                                isSafe={isWindSpeedSafe}
                                 subValues={windSpeedSubValues}
                             />
                             <DetailRow
                                 icon="weather-windy-variant"
                                 label="Wind Gusts"
                                 value={windGust}
-                                isSafe={isWindSafe}
+                                isSafe={isWindGustSafe}
                             />
                             <DetailRow
                                 icon="eye"

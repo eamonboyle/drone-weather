@@ -244,7 +244,7 @@ export default function Home() {
                                     >
                                         <WeatherGrid
                                             weatherData={weatherData}
-                                            hourIndex={selectedHour}
+                                            selectedClockHour={selectedHour}
                                         />
                                     </Animated.View>
                                 )}

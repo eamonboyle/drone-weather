@@ -5,6 +5,7 @@ import { DroneFlyabilityService } from '@/services/droneFlyabilityService'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
 import { useWeatherData } from '@/contexts/WeatherDataContext'
 import { HourlyWeatherData } from '@/types/weather'
+import { getTodayHourlyData } from '@/utils/weatherHourUtils'
 
 interface SafetyBarProps {
     weatherData: HourlyWeatherData[]
@@ -166,6 +167,11 @@ export function HourSelector({
                         Now
                     </Text>
                 </Pressable>
+            </View>
+            <View className="mb-3">
+                <SafetyBar
+                    weatherData={getTodayHourlyData(weatherData.hourlyData)}
+                />
             </View>
             <View className="relative">
                 <ScrollView

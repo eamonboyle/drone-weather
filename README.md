@@ -25,7 +25,7 @@ A mobile application built with React Native and Expo that helps drone pilots de
 - [x] Allow user to change location (needs location search functionality)
 - [x] Select drone profiles for default settings such as Wind speed - need to research the data for this
 - [x] Fix bug with hour selector not functioning
-- [ ] Fix weird behaviour with location search modal not selecting city when you click
+- [x] Fix weird behaviour with location search modal not selecting city when you click
 
 ## Links
 - [Expo Build Reference - APK](https://docs.expo.dev/build-reference/apk/)

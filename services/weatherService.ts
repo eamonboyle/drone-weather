@@ -1,4 +1,4 @@
-import { WeatherData, HourlyWeatherData } from '@/types/weather'
+import { WeatherData } from '@/types/weather'
 import { WeatherConfigService } from '@/services/weatherConfigService'
 import { WeatherCacheService } from '@/services/weatherCacheService'
 import { WeatherApiClient } from '@/services/weatherApiClient'
@@ -6,6 +6,7 @@ import {
     DroneFlyabilityService,
     DroneFlightConditions,
 } from '@/services/droneFlyabilityService'
+import { findHourlyDataForClockHour } from '@/utils/weatherHourUtils'
 
 function convertTemperature(
     value: number,
@@ -78,7 +79,7 @@ export class WeatherService {
 
     static async isDroneFlyable(
         weather: WeatherData,
-        hourIndex: number = 0
+        clockHour: number = new Date().getHours()
     ): Promise<DroneFlightConditions> {
         try {
             const thresholds = await WeatherConfigService.getThresholds()
@@ -86,7 +87,14 @@ export class WeatherService {
                 throw new Error('Weather thresholds not available')
             }
 
-            const hourData = weather.hourlyData[hourIndex]
+            const hourData = findHourlyDataForClockHour(
+                weather.hourlyData,
+                clockHour
+            )
+            if (!hourData) {
+                throw new Error('No weather data available for selected hour')
+            }
+
             return DroneFlyabilityService.checkFlyingConditions(
                 hourData,
                 thresholds

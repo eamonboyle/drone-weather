@@ -5,6 +5,7 @@ import {
     convertSpeed,
     convertDistance,
 } from '@/utils/unitConversion'
+import { API_WIND_UNIT } from '@/constants/weatherUnits'
 
 export interface DroneFlightConditions {
     isSuitable: boolean
@@ -16,6 +17,14 @@ export interface DroneFlightConditions {
 interface ConditionCheck {
     isSafe: boolean
     reason?: string
+}
+
+function normalizeApiWind(
+    windMph: number,
+    thresholdUnit: WeatherThresholds['windSpeed']['unit']
+): number {
+    if (thresholdUnit === API_WIND_UNIT) return windMph
+    return convertSpeed(windMph, 'mph', 'kmh')
 }
 
 function checkTemperature(
@@ -44,40 +53,73 @@ function checkTemperature(
         isSafe,
         reason: isSafe
             ? undefined
-            : `Temperature (${temperature}°C) is outside safe range (${minTemp}°C - ${maxTemp}°C)`,
+            : `Temperature (${temperature.toFixed(1)}°C) is outside safe range (${minTemp.toFixed(1)}°C - ${maxTemp.toFixed(1)}°C)`,
     }
 }
 
 function checkWindSpeed(
-    windSpeed: number,
+    windSpeedMph: number,
     thresholds: WeatherThresholds
 ): ConditionCheck {
-    const maxWindSpeed =
-        thresholds.windSpeed.unit === 'mph'
-            ? convertSpeed(thresholds.windSpeed.max, 'mph', 'kmh')
-            : thresholds.windSpeed.max
+    const windInThresholdUnit = normalizeApiWind(
+        windSpeedMph,
+        thresholds.windSpeed.unit
+    )
+    const maxWindSpeed = thresholds.windSpeed.max
+    const unitLabel = thresholds.windSpeed.unit === 'mph' ? 'mph' : 'km/h'
 
-    const isSafe = windSpeed <= maxWindSpeed
+    const isSafe = windInThresholdUnit <= maxWindSpeed
     return {
         isSafe,
-        reason: isSafe ? undefined : 'Wind speed is too high',
+        reason: isSafe
+            ? undefined
+            : `Wind speed (${windInThresholdUnit.toFixed(1)} ${unitLabel}) exceeds maximum (${maxWindSpeed} ${unitLabel})`,
+    }
+}
+
+function checkWindGust(
+    windGustMph: number,
+    thresholds: WeatherThresholds
+): ConditionCheck {
+    const gustInThresholdUnit = normalizeApiWind(
+        windGustMph,
+        thresholds.windSpeed.unit
+    )
+    const maxGust = thresholds.windGust.max
+    const unitLabel = thresholds.windSpeed.unit === 'mph' ? 'mph' : 'km/h'
+
+    const isSafe = gustInThresholdUnit <= maxGust
+    return {
+        isSafe,
+        reason: isSafe
+            ? undefined
+            : `Wind gusts (${gustInThresholdUnit.toFixed(1)} ${unitLabel}) exceed maximum (${maxGust} ${unitLabel})`,
     }
 }
 
 function checkVisibility(
-    visibility: number, // visibility in kilometers
+    visibilityMeters: number,
     thresholds: WeatherThresholds
 ): ConditionCheck {
-    // Convert threshold to kilometers for comparison
+    const visibilityKm = visibilityMeters / 1000
     const minVisibilityKm =
         thresholds.visibility.unit === 'miles'
             ? convertDistance(thresholds.visibility.min, 'miles', 'kilometers')
             : thresholds.visibility.min
 
-    const isSafe = visibility >= minVisibilityKm
+    const isSafe = visibilityKm >= minVisibilityKm
+    const unitLabel =
+        thresholds.visibility.unit === 'miles' ? 'mi' : 'km'
+    const displayVisibility =
+        thresholds.visibility.unit === 'miles'
+            ? convertDistance(visibilityKm, 'kilometers', 'miles')
+            : visibilityKm
+
     return {
         isSafe,
-        reason: isSafe ? undefined : 'Visibility is too low',
+        reason: isSafe
+            ? undefined
+            : `Visibility (${displayVisibility.toFixed(1)} ${unitLabel}) is below minimum (${thresholds.visibility.min} ${unitLabel})`,
     }
 }
 
@@ -88,15 +130,21 @@ function checkWeatherConditions(
 ): ConditionCheck[] {
     const checks: ConditionCheck[] = []
 
-    // if (cloudCover > thresholds.weather.maxCloudCover) {
-    //     checks.push({ isSafe: false, reason: 'Cloud cover is too high' })
-    // }
+    if (cloudCover > thresholds.weather.maxCloudCover) {
+        checks.push({
+            isSafe: false,
+            reason: `Cloud cover (${cloudCover.toFixed(0)}%) exceeds maximum (${thresholds.weather.maxCloudCover}%)`,
+        })
+    }
 
     if (
         precipitationProbability >
         thresholds.weather.maxPrecipitationProbability
     ) {
-        checks.push({ isSafe: false, reason: 'High chance of precipitation' })
+        checks.push({
+            isSafe: false,
+            reason: `Precipitation probability (${precipitationProbability.toFixed(0)}%) exceeds maximum (${thresholds.weather.maxPrecipitationProbability}%)`,
+        })
     }
 
     return checks
@@ -126,10 +174,10 @@ export class DroneFlyabilityService {
         const { speeds: windSpeedDetails, gusts: windGustDetails } =
             getWindDetails(hourData)
 
-        // Perform all condition checks
         const checks: ConditionCheck[] = [
             checkTemperature(hourData.temperature2m, thresholds),
             checkWindSpeed(hourData.windSpeed10m, thresholds),
+            checkWindGust(hourData.windGusts10m, thresholds),
             checkVisibility(hourData.visibility, thresholds),
             ...checkWeatherConditions(
                 hourData.cloudCover,
@@ -138,7 +186,6 @@ export class DroneFlyabilityService {
             ),
         ]
 
-        // Collect all failure reasons
         checks.forEach((check) => {
             if (!check.isSafe && check.reason) {
                 reasons.push(check.reason)

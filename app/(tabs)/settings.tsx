@@ -29,7 +29,7 @@ import { WeatherConfigService } from '@/services/weatherConfigService'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
 import { useLocation } from '@/contexts/LocationContext'
 import { SettingsSlider } from '@/components/SettingsSlider'
-import { DroneProfile } from '@/types/droneProfiles'
+import { DroneProfile, DRONE_PROFILES } from '@/types/droneProfiles'
 
 interface SettingItemProps {
     icon: keyof typeof MaterialCommunityIcons.glyphMap
@@ -121,8 +121,18 @@ export default function SettingsScreen() {
 
     const loadThresholds = async () => {
         try {
-            const loadedThresholds = await WeatherConfigService.getThresholds()
+            const [loadedThresholds, profileId] = await Promise.all([
+                WeatherConfigService.getThresholds(),
+                WeatherConfigService.getSelectedProfileId(),
+            ])
             setThresholds(loadedThresholds)
+
+            if (profileId) {
+                const profile = DRONE_PROFILES.find((p) => p.id === profileId)
+                if (profile) {
+                    setSelectedDroneProfile(profile)
+                }
+            }
         } catch (error) {
             console.error('Error loading thresholds:', error)
             Alert.alert('Error', 'Failed to load weather thresholds')
@@ -151,7 +161,10 @@ export default function SettingsScreen() {
         try {
             setSelectedDroneProfile(profile)
             setThresholds(profile.thresholds)
-            await updateThresholds(profile.thresholds)
+            await Promise.all([
+                updateThresholds(profile.thresholds),
+                WeatherConfigService.saveSelectedProfileId(profile.id),
+            ])
             Alert.alert('Success', `Applied ${profile.name} profile settings`)
         } catch (error) {
             console.error('Error applying drone profile:', error)

@@ -6,6 +6,7 @@ import {
     TouchableOpacity,
     ActivityIndicator,
     ScrollView,
+    Pressable,
 } from 'react-native'
 import {
     LocationSearchService,
@@ -23,36 +24,47 @@ interface LocationSearchProps {
 export function LocationSearch({ onLocationSelected }: LocationSearchProps) {
     const [searchQuery, setSearchQuery] = useState('')
     const [results, setResults] = useState<LocationSearchResult[]>([])
-    const [isLoading, setIsLoading] = useState(false)
+    const [isSearching, setIsSearching] = useState(false)
+    const [isSelecting, setIsSelecting] = useState(false)
+    const [selectingIndex, setSelectingIndex] = useState<number | null>(null)
     const [error, setError] = useState<string | null>(null)
     const { updateLocation } = useLocation()
     const { setWeatherData } = useWeatherData()
 
     const handleSearch = async () => {
-        // If search is empty, just show warning and return
         if (!searchQuery.trim()) {
             setError('Please enter a location to search')
             setResults([])
             return
         }
 
-        setIsLoading(true)
+        setIsSearching(true)
         setError(null)
 
         try {
-            const searchResults = await LocationSearchService.searchLocations(searchQuery.trim())
+            const searchResults = await LocationSearchService.searchLocations(
+                searchQuery.trim()
+            )
             setResults(searchResults)
         } catch (err) {
             setError('Failed to search locations. Please try again.')
             console.error(err)
         } finally {
-            setIsLoading(false)
+            setIsSearching(false)
         }
     }
 
-    const handleLocationSelect = async (result: LocationSearchResult) => {
+    const handleLocationSelect = async (
+        result: LocationSearchResult,
+        index: number
+    ) => {
+        if (isSelecting) return
+
+        setIsSelecting(true)
+        setSelectingIndex(index)
+        setError(null)
+
         try {
-            // Create a mock location object that matches the structure expected by the app
             const mockLocation: Location.LocationObject = {
                 coords: {
                     latitude: result.latitude,
@@ -66,10 +78,6 @@ export function LocationSearch({ onLocationSelected }: LocationSearchProps) {
                 timestamp: Date.now(),
             }
 
-            // Close the modal immediately
-            onLocationSelected?.()
-
-            // Then update the location and fetch weather data
             await updateLocation(mockLocation)
             const weather = await WeatherService.getCurrentWeather(
                 result.latitude,
@@ -77,12 +85,15 @@ export function LocationSearch({ onLocationSelected }: LocationSearchProps) {
             )
             setWeatherData(weather)
 
-            // Clear the search results
             setResults([])
             setSearchQuery('')
+            onLocationSelected?.()
         } catch (err) {
             setError('Failed to update location. Please try again.')
             console.error(err)
+        } finally {
+            setIsSelecting(false)
+            setSelectingIndex(null)
         }
     }
 
@@ -100,10 +111,13 @@ export function LocationSearch({ onLocationSelected }: LocationSearchProps) {
                     value={searchQuery}
                     onChangeText={setSearchQuery}
                     onSubmitEditing={handleSearch}
+                    editable={!isSelecting}
                 />
                 <TouchableOpacity
                     onPress={handleSearch}
+                    disabled={isSearching || isSelecting}
                     className="bg-amber-500 px-4 h-11 rounded-xl justify-center"
+                    style={{ opacity: isSearching || isSelecting ? 0.6 : 1 }}
                 >
                     <Text
                         className="text-background font-semibold"
@@ -114,7 +128,7 @@ export function LocationSearch({ onLocationSelected }: LocationSearchProps) {
                 </TouchableOpacity>
             </View>
 
-            {isLoading && (
+            {isSearching && (
                 <View className="p-4">
                     <ActivityIndicator size="small" color="#f59e0b" />
                 </View>
@@ -130,30 +144,46 @@ export function LocationSearch({ onLocationSelected }: LocationSearchProps) {
             )}
 
             <ScrollView className="max-h-60">
-                {results.map((result, index) => (
-                    <TouchableOpacity
-                        key={index}
-                        onPress={() => handleLocationSelect(result)}
-                        className="p-4 border-b border-white/5 active:bg-white/5"
-                    >
-                        <Text
-                            className="text-slate-100 text-base"
-                            style={{ fontFamily: 'DMSans' }}
+                {results.map((result, index) => {
+                    const isActiveSelection = selectingIndex === index
+
+                    return (
+                        <Pressable
+                            key={`${result.latitude}-${result.longitude}-${index}`}
+                            onPress={() => handleLocationSelect(result, index)}
+                            disabled={isSelecting}
+                            className="p-4 border-b border-white/5 active:bg-white/5"
+                            style={{ opacity: isSelecting && !isActiveSelection ? 0.5 : 1 }}
                         >
-                            {result.formatted}
-                        </Text>
-                        {(result.city || result.country) && (
-                            <Text
-                                className="text-slate-500 text-sm mt-0.5"
-                                style={{ fontFamily: 'DMSans' }}
-                            >
-                                {[result.city, result.country]
-                                    .filter(Boolean)
-                                    .join(', ')}
-                            </Text>
-                        )}
-                    </TouchableOpacity>
-                ))}
+                            <View className="flex-row items-center justify-between">
+                                <View className="flex-1 pr-3">
+                                    <Text
+                                        className="text-slate-100 text-base"
+                                        style={{ fontFamily: 'DMSans' }}
+                                    >
+                                        {result.formatted}
+                                    </Text>
+                                    {(result.city || result.country) && (
+                                        <Text
+                                            className="text-slate-500 text-sm mt-0.5"
+                                            style={{ fontFamily: 'DMSans' }}
+                                        >
+                                            {[result.city, result.country]
+                                                .filter(Boolean)
+                                                .join(', ')}
+                                        </Text>
+                                    )}
+                                </View>
+                                {isActiveSelection && (
+                                    <ActivityIndicator
+                                        size="small"
+                                        color="#f59e0b"
+                                    />
+                                )}
+                            </View>
+                        </Pressable>
+                    )
+                })}
             </ScrollView>
         </View>
     )
