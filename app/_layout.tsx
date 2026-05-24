@@ -1,9 +1,5 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome'
-import {
-    DarkTheme,
-    DefaultTheme,
-    ThemeProvider,
-} from '@react-navigation/native'
+import { DarkTheme, ThemeProvider } from '@react-navigation/native'
 import { useFonts } from 'expo-font'
 import { Stack } from 'expo-router'
 import * as SplashScreen from 'expo-splash-screen'
@@ -13,9 +9,18 @@ import 'react-native-reanimated'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { LocationProvider } from '@/contexts/LocationContext'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
-import { KeyboardAvoidingView, Platform } from 'react-native'
+import {
+    Outfit_400Regular,
+    Outfit_500Medium,
+    Outfit_600SemiBold,
+    Outfit_700Bold,
+} from '@expo-google-fonts/outfit'
+import {
+    DMSans_400Regular,
+    DMSans_500Medium,
+    DMSans_600SemiBold,
+} from '@expo-google-fonts/dm-sans'
 
-import { useColorScheme } from '@/hooks/useColorScheme'
 import { WeatherConfigProvider } from '@/contexts/WeatherConfigContext'
 import { WeatherDataProvider } from '@/contexts/WeatherDataContext'
 
@@ -33,9 +38,14 @@ export const unstable_settings = {
 SplashScreen.preventAutoHideAsync()
 
 export default function RootLayout() {
-    const colorScheme = useColorScheme()
     const [loaded, error] = useFonts({
-        SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+        Outfit: Outfit_400Regular,
+        'Outfit-Medium': Outfit_500Medium,
+        'Outfit-SemiBold': Outfit_600SemiBold,
+        'Outfit-Bold': Outfit_700Bold,
+        DMSans: DMSans_400Regular,
+        'DMSans-Medium': DMSans_500Medium,
+        'DMSans-SemiBold': DMSans_600SemiBold,
         ...FontAwesome.font,
     })
 
@@ -55,7 +65,7 @@ export default function RootLayout() {
     }
 
     return (
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <ThemeProvider value={DarkTheme}>
             <GestureHandlerRootView style={{ flex: 1 }}>
                 <SafeAreaProvider>
                     <WeatherConfigProvider>
@@ -64,8 +74,8 @@ export default function RootLayout() {
                                 <Stack
                                     screenOptions={{
                                         headerShown: false,
-                                        contentStyle: { backgroundColor: '#111827' },
-                                        animation: Platform.OS === 'android' ? 'none' : 'default',
+                                        contentStyle: { backgroundColor: '#08090c' },
+                                        animation: 'default',
                                     }}
                                 >
                                     <Stack.Screen
@@ -73,36 +83,12 @@ export default function RootLayout() {
                                         options={{ headerShown: false }}
                                     />
                                 </Stack>
-                                <StatusBar style="auto" />
+                                <StatusBar style="light" />
                             </LocationProvider>
                         </WeatherDataProvider>
                     </WeatherConfigProvider>
                 </SafeAreaProvider>
             </GestureHandlerRootView>
         </ThemeProvider>
-    )
-}
-
-function RootLayoutNav() {
-    const colorScheme = useColorScheme()
-
-    return (
-        <GestureHandlerRootView style={{ flex: 1 }}>
-            <ThemeProvider
-                value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
-            >
-                <WeatherConfigProvider>
-                    <WeatherDataProvider>
-                        <Stack>
-                            <Stack.Screen
-                                name="(tabs)"
-                                options={{ headerShown: false }}
-                            />
-                        </Stack>
-                        <StatusBar style="auto" />
-                    </WeatherDataProvider>
-                </WeatherConfigProvider>
-            </ThemeProvider>
-        </GestureHandlerRootView>
     )
 }

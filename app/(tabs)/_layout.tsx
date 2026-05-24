@@ -8,19 +8,24 @@ import '@/styles/globals.css'
 export default function TabLayout() {
     return (
         <SafeAreaProvider>
-            <StatusBar style="auto" />
+            <StatusBar style="light" />
             <Tabs
                 screenOptions={{
                     headerStyle: {
-                        backgroundColor: '#000',
+                        backgroundColor: '#08090c',
                     },
-                    headerTintColor: '#fff',
+                    headerTintColor: '#f8fafc',
                     tabBarStyle: {
-                        backgroundColor: '#1f2937',
-                        borderTopWidth: 0,
+                        backgroundColor: '#0a0b0e',
+                        borderTopWidth: 1,
+                        borderTopColor: 'rgba(255, 255, 255, 0.06)',
                     },
-                    tabBarActiveTintColor: '#60A5FA',
-                    tabBarInactiveTintColor: '#9CA3AF',
+                    tabBarActiveTintColor: '#f59e0b',
+                    tabBarInactiveTintColor: '#64748b',
+                    tabBarLabelStyle: {
+                        fontFamily: 'DMSans-Medium',
+                        fontSize: 11,
+                    },
                     tabBarHideOnKeyboard: Platform.OS === 'android',
                 }}
             >

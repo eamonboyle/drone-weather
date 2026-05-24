@@ -24,38 +24,57 @@ export function DroneProfileSelector({
 
     return (
         <View className="mb-6">
-            <Text className="text-blue-400 text-lg mb-2">Drone Profile</Text>
+            <Text
+                className="text-amber-500 text-sm mb-2"
+                style={{ fontFamily: 'Outfit-SemiBold' }}
+            >
+                Drone Profile
+            </Text>
 
             <Pressable
                 onPress={() => setIsModalVisible(true)}
-                className="bg-gray-800/50 rounded-lg p-4 flex-row items-center justify-between"
+                className="rounded-xl p-4 flex-row items-center justify-between"
+                style={{
+                    backgroundColor: 'rgba(22, 26, 32, 0.6)',
+                    borderWidth: 1,
+                    borderColor: 'rgba(255, 255, 255, 0.06)',
+                }}
             >
                 {selectedProfile ? (
                     <View className="flex-row items-center flex-1">
                         {selectedProfile.imageUrl && (
                             <Image
                                 source={{ uri: selectedProfile.imageUrl }}
-                                className="w-12 h-12 rounded-md mr-3"
+                                className="w-12 h-12 rounded-lg mr-3"
                             />
                         )}
                         <View className="flex-1">
-                            <Text className="text-white text-lg font-semibold">
+                            <Text
+                                className="text-slate-100 text-base font-semibold"
+                                style={{ fontFamily: 'Outfit-SemiBold' }}
+                            >
                                 {selectedProfile.name}
                             </Text>
-                            <Text className="text-gray-400">
+                            <Text
+                                className="text-slate-500 text-sm"
+                                style={{ fontFamily: 'DMSans' }}
+                            >
                                 {selectedProfile.manufacturer}
                             </Text>
                         </View>
                     </View>
                 ) : (
-                    <Text className="text-gray-400 text-lg">
+                    <Text
+                        className="text-slate-500 text-base"
+                        style={{ fontFamily: 'DMSans' }}
+                    >
                         Select a drone profile
                     </Text>
                 )}
                 <MaterialCommunityIcons
                     name="chevron-right"
-                    size={24}
-                    color="#60A5FA"
+                    size={22}
+                    color="#f59e0b"
                 />
             </Pressable>
 
@@ -65,10 +84,18 @@ export function DroneProfileSelector({
                 transparent={true}
                 onRequestClose={() => setIsModalVisible(false)}
             >
-                <View className="flex-1 bg-black/50">
-                    <View className="flex-1 mt-24 bg-gray-900 rounded-t-3xl">
-                        <View className="p-4 border-b border-gray-800 flex-row justify-between items-center">
-                            <Text className="text-white text-xl font-semibold">
+                <View className="flex-1 bg-black/60">
+                    <View
+                        className="flex-1 mt-24 rounded-t-3xl"
+                        style={{ backgroundColor: '#0f1115' }}
+                    >
+                        <View
+                            className="p-4 border-b border-white/5 flex-row justify-between items-center"
+                        >
+                            <Text
+                                className="text-slate-100 text-lg font-semibold"
+                                style={{ fontFamily: 'Outfit-SemiBold' }}
+                            >
                                 Select Drone Profile
                             </Text>
                             <Pressable
@@ -77,8 +104,8 @@ export function DroneProfileSelector({
                             >
                                 <MaterialCommunityIcons
                                     name="close"
-                                    size={24}
-                                    color="#60A5FA"
+                                    size={22}
+                                    color="#f59e0b"
                                 />
                             </Pressable>
                         </View>
@@ -91,28 +118,44 @@ export function DroneProfileSelector({
                                         onSelectProfile(profile)
                                         setIsModalVisible(false)
                                     }}
-                                    className={`bg-gray-800/50 rounded-lg p-4 mb-3 flex-row items-center ${
-                                        selectedProfile?.id === profile.id
-                                            ? 'border border-blue-500'
-                                            : ''
-                                    }`}
+                                    className="rounded-xl p-4 mb-3 flex-row items-center"
+                                    style={{
+                                        backgroundColor:
+                                            selectedProfile?.id === profile.id
+                                                ? 'rgba(245, 158, 11, 0.15)'
+                                                : 'rgba(22, 26, 32, 0.6)',
+                                        borderWidth: 1,
+                                        borderColor:
+                                            selectedProfile?.id === profile.id
+                                                ? 'rgba(245, 158, 11, 0.4)'
+                                                : 'rgba(255, 255, 255, 0.06)',
+                                    }}
                                 >
                                     {profile.imageUrl && (
                                         <Image
                                             source={{ uri: profile.imageUrl }}
-                                            className="w-16 h-16 rounded-md mr-4"
+                                            className="w-16 h-16 rounded-lg mr-4"
                                         />
                                     )}
                                     <View className="flex-1">
-                                        <Text className="text-white text-lg font-semibold">
+                                        <Text
+                                            className="text-slate-100 text-base font-semibold"
+                                            style={{ fontFamily: 'Outfit-SemiBold' }}
+                                        >
                                             {profile.name}
                                         </Text>
-                                        <Text className="text-gray-400">
+                                        <Text
+                                            className="text-slate-500 text-sm"
+                                            style={{ fontFamily: 'DMSans' }}
+                                        >
                                             {profile.manufacturer} •{' '}
                                             {profile.model}
                                         </Text>
                                         <View className="flex-row mt-2">
-                                            <Text className="text-gray-400 text-sm">
+                                            <Text
+                                                className="text-slate-500 text-xs"
+                                                style={{ fontFamily: 'DMSans' }}
+                                            >
                                                 Max Wind:{' '}
                                                 {
                                                     profile.thresholds.windSpeed
@@ -123,13 +166,16 @@ export function DroneProfileSelector({
                                                         .unit
                                                 }
                                             </Text>
-                                            <Text className="text-gray-400 text-sm ml-4">
-                                                Temp Range:{' '}
+                                            <Text
+                                                className="text-slate-500 text-xs ml-4"
+                                                style={{ fontFamily: 'DMSans' }}
+                                            >
+                                                Temp:{' '}
                                                 {
                                                     profile.thresholds
                                                         .temperature.min
                                                 }
-                                                ° -
+                                                °-
                                                 {
                                                     profile.thresholds
                                                         .temperature.max
@@ -141,8 +187,8 @@ export function DroneProfileSelector({
                                     {selectedProfile?.id === profile.id && (
                                         <MaterialCommunityIcons
                                             name="check-circle"
-                                            size={24}
-                                            color="#60A5FA"
+                                            size={22}
+                                            color="#f59e0b"
                                             className="ml-2"
                                         />
                                     )}

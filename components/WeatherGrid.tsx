@@ -126,6 +126,22 @@ export function WeatherGrid({ weatherData, hourIndex }: WeatherGridProps) {
 
     const hourData = weatherData.hourlyData[hourIndex]
 
+    const getCardStyles = (safety: 'safe' | 'warning' | 'unsafe') => {
+        const borderColor =
+            safety === 'safe'
+                ? 'rgba(16, 185, 129, 0.35)'
+                : safety === 'warning'
+                  ? 'rgba(245, 158, 11, 0.35)'
+                  : 'rgba(239, 68, 68, 0.35)'
+        const backgroundColor =
+            safety === 'safe'
+                ? 'rgba(6, 95, 70, 0.4)'
+                : safety === 'warning'
+                  ? 'rgba(120, 53, 15, 0.35)'
+                  : 'rgba(127, 29, 29, 0.4)'
+        return { borderColor, backgroundColor }
+    }
+
     const weatherItems = [
         {
             label: 'Temperature',
@@ -199,18 +215,19 @@ export function WeatherGrid({ weatherData, hourIndex }: WeatherGridProps) {
 
     return (
         <>
-            <View className="flex-row flex-wrap gap-2">
+            <View className="flex-row flex-wrap gap-3">
                 {weatherItems.map((item) => {
                     const safety = isParameterSafe(
                         item.label,
                         item.numericValue
                     )
-                    const bgColor =
+                    const cardStyles = getCardStyles(safety)
+                    const iconColor =
                         safety === 'safe'
-                            ? 'bg-green-800'
+                            ? '#10b981'
                             : safety === 'warning'
-                              ? 'bg-yellow-700'
-                              : 'bg-red-800'
+                              ? '#f59e0b'
+                              : '#ef4444'
 
                     const handlePress = () => {
                         if (item.label === 'Wind Speed') {
@@ -224,20 +241,30 @@ export function WeatherGrid({ weatherData, hourIndex }: WeatherGridProps) {
                         <Pressable
                             key={item.label}
                             onPress={handlePress}
-                            className={`p-4 rounded-lg flex-1 min-w-[30%] ${bgColor}`}
+                            className="p-4 flex-1 min-w-[30%] rounded-xl overflow-hidden"
+                            style={{
+                                borderWidth: 1,
+                                borderColor: cardStyles.borderColor,
+                                backgroundColor: cardStyles.backgroundColor,
+                            }}
                         >
                             <View className="items-center">
                                 <MaterialCommunityIcons
                                     name={item.icon as any}
-                                    size={24}
-                                    color="white"
-                                    style={{ opacity: 0.75 }}
+                                    size={22}
+                                    color={iconColor}
                                 />
-                                <Text className="text-white text-sm opacity-75 mt-1">
+                                <Text
+                                    className="text-slate-400 text-xs mt-1.5"
+                                    style={{ fontFamily: 'DMSans' }}
+                                >
                                     {item.label}
                                 </Text>
                             </View>
-                            <Text className="text-white text-lg font-semibold mt-2 text-center">
+                            <Text
+                                className="text-white text-base font-semibold mt-2 text-center"
+                                style={{ fontFamily: 'Outfit-SemiBold' }}
+                            >
                                 {item.value}
                             </Text>
                         </Pressable>

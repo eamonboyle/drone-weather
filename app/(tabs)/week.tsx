@@ -79,7 +79,7 @@ export default function WeekScreen() {
     }
 
     return (
-        <SafeAreaView className="flex-1 bg-gray-900">
+        <SafeAreaView className="flex-1 bg-background">
             <LocationBar locationName={locationName} />
             {isLoading && isFirstLoad.current ? (
                 <LoadingSpinner />

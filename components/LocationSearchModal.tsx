@@ -35,13 +35,21 @@ export function LocationSearchModal({
             onRequestClose={onClose}
         >
             <TouchableWithoutFeedback onPress={handleBackdropPress}>
-                <View className="flex-1 bg-black/50 justify-center items-center px-4">
+                <View className="flex-1 bg-black/60 justify-center items-center px-4">
                     <View
-                        className="bg-gray-900 w-full rounded-2xl overflow-hidden"
-                        style={{ maxHeight: height * 0.8 }}
+                        className="w-full rounded-2xl overflow-hidden"
+                        style={{
+                            maxHeight: height * 0.8,
+                            backgroundColor: '#0f1115',
+                            borderWidth: 1,
+                            borderColor: 'rgba(255, 255, 255, 0.08)',
+                        }}
                     >
-                        <View className="flex-row items-center justify-between px-6 py-4 border-b border-gray-800">
-                            <Text className="text-white text-xl font-semibold">
+                        <View className="flex-row items-center justify-between px-6 py-4 border-b border-white/5">
+                            <Text
+                                className="text-slate-100 text-lg font-semibold"
+                                style={{ fontFamily: 'Outfit-SemiBold' }}
+                            >
                                 Search Location
                             </Text>
                             <Pressable
@@ -50,8 +58,8 @@ export function LocationSearchModal({
                             >
                                 <MaterialCommunityIcons
                                     name="close"
-                                    size={24}
-                                    color="#60A5FA"
+                                    size={22}
+                                    color="#f59e0b"
                                 />
                             </Pressable>
                         </View>

@@ -88,43 +88,65 @@ export function LocationSearch({ onLocationSelected }: LocationSearchProps) {
 
     return (
         <View className="w-full">
-            <View className="flex-row items-center space-x-2 p-4">
+            <View className="flex-row items-center gap-2 p-4">
                 <TextInput
-                    className="flex-1 h-10 px-3 text-white bg-gray-800 rounded-lg"
+                    className="flex-1 h-11 px-4 text-slate-100 rounded-xl"
+                    style={{
+                        backgroundColor: 'rgba(22, 26, 32, 0.8)',
+                        fontFamily: 'DMSans',
+                    }}
                     placeholder="Search location..."
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor="#64748b"
                     value={searchQuery}
                     onChangeText={setSearchQuery}
                     onSubmitEditing={handleSearch}
                 />
                 <TouchableOpacity
                     onPress={handleSearch}
-                    className="bg-blue-500 px-4 h-10 rounded-lg justify-center"
+                    className="bg-amber-500 px-4 h-11 rounded-xl justify-center"
                 >
-                    <Text className="text-white">Search</Text>
+                    <Text
+                        className="text-background font-semibold"
+                        style={{ fontFamily: 'Outfit-SemiBold' }}
+                    >
+                        Search
+                    </Text>
                 </TouchableOpacity>
             </View>
 
             {isLoading && (
                 <View className="p-4">
-                    <ActivityIndicator size="small" color="#60A5FA" />
+                    <ActivityIndicator size="small" color="#f59e0b" />
                 </View>
             )}
 
-            {error && <Text className="text-red-500 px-4">{error}</Text>}
+            {error && (
+                <Text
+                    className="text-red-400 px-4 text-sm"
+                    style={{ fontFamily: 'DMSans' }}
+                >
+                    {error}
+                </Text>
+            )}
 
             <ScrollView className="max-h-60">
                 {results.map((result, index) => (
                     <TouchableOpacity
                         key={index}
                         onPress={() => handleLocationSelect(result)}
-                        className="p-4 border-b border-gray-700"
+                        className="p-4 border-b border-white/5 active:bg-white/5"
                     >
-                        <Text className="text-white text-base">
+                        <Text
+                            className="text-slate-100 text-base"
+                            style={{ fontFamily: 'DMSans' }}
+                        >
                             {result.formatted}
                         </Text>
                         {(result.city || result.country) && (
-                            <Text className="text-gray-400 text-sm">
+                            <Text
+                                className="text-slate-500 text-sm mt-0.5"
+                                style={{ fontFamily: 'DMSans' }}
+                            >
                                 {[result.city, result.country]
                                     .filter(Boolean)
                                     .join(', ')}

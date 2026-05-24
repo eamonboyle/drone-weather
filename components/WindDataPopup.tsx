@@ -50,21 +50,28 @@ export function WindDataPopup({
             onRequestClose={onClose}
         >
             <Pressable
-                className="flex-1 justify-center items-center bg-black/50"
+                className="flex-1 justify-center items-center bg-black/60"
                 onPress={onClose}
             >
                 <Pressable
-                    className="bg-gray-800 p-6 rounded-xl w-[80%] max-w-[400px]"
+                    className="p-6 rounded-2xl w-[80%] max-w-[400px]"
+                    style={{
+                        backgroundColor: '#161a20',
+                        borderWidth: 1,
+                        borderColor: 'rgba(255, 255, 255, 0.08)',
+                    }}
                     onPress={(e) => e.stopPropagation()}
                 >
                     <View className="flex-row items-center mb-4">
                         <MaterialCommunityIcons
                             name={icon}
-                            size={24}
-                            color="white"
-                            style={{ opacity: 0.75 }}
+                            size={22}
+                            color="#f59e0b"
                         />
-                        <Text className="text-white text-xl font-semibold ml-2">
+                        <Text
+                            className="text-slate-100 text-lg font-semibold ml-2"
+                            style={{ fontFamily: 'Outfit-SemiBold' }}
+                        >
                             {title}
                         </Text>
                     </View>
@@ -72,14 +79,23 @@ export function WindDataPopup({
                     {data.map((item, index) => (
                         <View
                             key={item.height}
-                            className={`flex-row justify-between items-center py-3 
-                                ${index !== data.length - 1 ? 'border-b border-gray-700' : ''}`}
+                            className={`flex-row justify-between items-center py-3 ${
+                                index !== data.length - 1
+                                    ? 'border-b border-white/5'
+                                    : ''
+                            }`}
                         >
-                            <Text className="text-white text-lg">
+                            <Text
+                                className="text-slate-300 text-base"
+                                style={{ fontFamily: 'DMSans' }}
+                            >
                                 At {item.height}
                             </Text>
                             <View className="flex-row items-center">
-                                <Text className="text-white text-lg font-semibold mr-2">
+                                <Text
+                                    className="text-slate-100 text-base font-semibold mr-2"
+                                    style={{ fontFamily: 'Outfit-SemiBold' }}
+                                >
                                     {formatSpeed(item.speed)}
                                 </Text>
                                 <MaterialCommunityIcons
@@ -88,10 +104,10 @@ export function WindDataPopup({
                                             ? 'check-circle'
                                             : 'close-circle'
                                     }
-                                    size={24}
+                                    size={20}
                                     color={
                                         isSpeedSafe(item.speed)
-                                            ? '#22c55e'
+                                            ? '#10b981'
                                             : '#ef4444'
                                     }
                                 />
@@ -101,9 +117,13 @@ export function WindDataPopup({
 
                     <Pressable
                         onPress={onClose}
-                        className="mt-6 bg-gray-700 py-3 rounded-lg"
+                        className="mt-6 py-3 rounded-xl"
+                        style={{ backgroundColor: 'rgba(245, 158, 11, 0.2)' }}
                     >
-                        <Text className="text-white text-center font-semibold">
+                        <Text
+                            className="text-amber-400 text-center font-semibold"
+                            style={{ fontFamily: 'Outfit-SemiBold' }}
+                        >
                             Close
                         </Text>
                     </Pressable>

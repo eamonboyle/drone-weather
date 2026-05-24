@@ -119,15 +119,14 @@ export function HourSelector({
         const hourData = hourlyFlyability.find((h) => h.hour === hour)
         if (selectedHour === hour) {
             return {
-                container: 'bg-blue-500',
-                text: 'text-white',
+                container: 'bg-amber-500',
+                text: 'text-background',
             }
         }
-        // Add a subtle indication of safety status in unselected hours
         if (hourData?.isSafe) {
             return {
                 container: 'bg-transparent',
-                text: 'text-green-400',
+                text: 'text-emerald-400',
             }
         }
         return {
@@ -145,20 +144,25 @@ export function HourSelector({
     return (
         <View className={`px-4 ${className}`}>
             <View className="flex-row items-center justify-between mb-2">
-                <Text className="text-gray-400 text-sm">
-                    Select an hour to view detailed weather conditions
+                <Text
+                    className="text-slate-500 text-xs"
+                    style={{ fontFamily: 'DMSans' }}
+                >
+                    Select hour for conditions
                 </Text>
-                {/* <SafetyBar weatherData={weatherData.hourlyData} /> */}
                 <Pressable
                     onPress={handleCurrentHourPress}
-                    className="ml-4 flex-row items-center bg-blue-500 px-3 py-1.5 rounded-full"
+                    className="ml-4 flex-row items-center bg-amber-500 px-3 py-1.5 rounded-full"
                 >
                     <MaterialCommunityIcons
                         name="clock"
-                        size={16}
-                        color="white"
+                        size={14}
+                        color="#08090c"
                     />
-                    <Text className="text-white text-sm font-medium ml-1">
+                    <Text
+                        className="text-background text-sm font-semibold ml-1.5"
+                        style={{ fontFamily: 'Outfit-SemiBold' }}
+                    >
                         Now
                     </Text>
                 </Pressable>
@@ -189,12 +193,15 @@ export function HourSelector({
                             <Pressable
                                 key={uniqueKey}
                                 onPress={() => onHourChange(hour)}
-                                className={`w-[60px] items-center py-2`}
+                                className="w-[60px] items-center py-2"
                             >
                                 <View
-                                    className={`w-8 h-8 rounded-full items-center justify-center ${style.container}`}
+                                    className={`w-9 h-9 rounded-full items-center justify-center ${style.container}`}
                                 >
-                                    <Text className={`text-lg ${style.text}`}>
+                                    <Text
+                                        className={`text-sm font-semibold ${style.text}`}
+                                        style={{ fontFamily: 'Outfit-SemiBold' }}
+                                    >
                                         {hour}H
                                     </Text>
                                 </View>

@@ -131,8 +131,11 @@ export default function Home() {
                 },
             ]}
         >
-            <ActivityIndicator size="large" color="#60A5FA" />
-            <Text className="text-white text-lg mt-4 font-medium">
+            <ActivityIndicator size="large" color="#f59e0b" />
+            <Text
+                className="text-slate-300 text-lg mt-4"
+                style={{ fontFamily: 'DMSans-Medium' }}
+            >
                 Loading weather data...
             </Text>
         </Animated.View>
@@ -141,7 +144,7 @@ export default function Home() {
     const renderFlightStatus = () => {
         const gradientColors = flightConditions.isSuitable
             ? (['#065f46', '#047857'] as const)
-            : (['#991b1b', '#b91c1c'] as const)
+            : (['#7f1d1d', '#991b1b'] as const)
 
         return (
             <Animated.View
@@ -157,31 +160,37 @@ export default function Home() {
                     colors={gradientColors}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
-                    className="p-4 rounded-3xl shadow-lg"
+                    className="p-5 rounded-2xl overflow-hidden"
+                    style={{
+                        borderWidth: 1,
+                        borderColor: 'rgba(255, 255, 255, 0.08)',
+                    }}
                 >
-                    <View className="flex-row items-center justify-center mb-0 pb-0">
+                    <View className="flex-row items-center justify-center">
                         <MaterialCommunityIcons
                             name={
                                 flightConditions.isSuitable
                                     ? 'airplane'
                                     : 'airplane-off'
                             }
-                            size={32}
+                            size={28}
                             color="white"
-                            style={{
-                                opacity: 0.9,
-                                marginTop: -5,
-                                paddingTop: 4,
-                            }}
+                            style={{ opacity: 0.95 }}
                         />
-                        <Text className="text-2xl text-white font-bold ml-3 leading-none pt-1.5">
+                        <Text
+                            className="text-xl text-white font-bold ml-3"
+                            style={{ fontFamily: 'Outfit-SemiBold' }}
+                        >
                             {flightConditions.isSuitable
                                 ? 'Safe to Fly'
                                 : 'Not Safe to Fly'}
                         </Text>
                     </View>
                     {flightConditions.reasons.length > 0 && (
-                        <View className="bg-black/20 rounded-xl p-4 mt-2">
+                        <View
+                            className="rounded-xl p-4 mt-3"
+                            style={{ backgroundColor: 'rgba(0, 0, 0, 0.25)' }}
+                        >
                             {flightConditions.reasons.map((reason, index) => (
                                 <View
                                     key={index}
@@ -189,10 +198,13 @@ export default function Home() {
                                 >
                                     <MaterialCommunityIcons
                                         name="alert-circle"
-                                        size={18}
-                                        color="#FCA5A5"
+                                        size={16}
+                                        color="rgba(255, 255, 255, 0.9)"
                                     />
-                                    <Text className="text-white ml-2 flex-1">
+                                    <Text
+                                        className="text-white/90 ml-2 flex-1 text-sm"
+                                        style={{ fontFamily: 'DMSans' }}
+                                    >
                                         {reason}
                                     </Text>
                                 </View>
@@ -205,7 +217,7 @@ export default function Home() {
     }
 
     return (
-        <SafeAreaView className="flex-1 bg-gray-900">
+        <SafeAreaView className="flex-1 bg-background">
             <Animated.View style={[{ flex: 1, opacity: fadeAnim }]}>
                 <LocationBar locationName={locationName} />
 
@@ -241,7 +253,7 @@ export default function Home() {
                     </View>
                 </KeyboardAvoidingView>
 
-                <View className="absolute bottom-0 left-0 right-0 bg-gray-900">
+                <View className="absolute bottom-0 left-0 right-0 bg-background">
                     <Animated.View
                         style={[
                             {

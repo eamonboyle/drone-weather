@@ -11,7 +11,7 @@ module.exports = {
         splash: {
             image: './assets/images/splash-icon.png',
             resizeMode: 'contain',
-            backgroundColor: '#ffffff',
+            backgroundColor: '#08090c',
         },
         assetBundlePatterns: ['**/*'],
         ios: {
@@ -21,7 +21,7 @@ module.exports = {
             package: 'com.eamonsdiary.droneweather',
             adaptiveIcon: {
                 foregroundImage: './assets/images/adaptive-icon.png',
-                backgroundColor: '#ffffff',
+                backgroundColor: '#08090c',
             },
         },
         web: {
@@ -31,13 +31,14 @@ module.exports = {
         },
         plugins: [
             'expo-router',
+            'expo-font',
             [
                 'expo-splash-screen',
                 {
                     image: './assets/images/splash-icon.png',
                     imageWidth: 200,
                     resizeMode: 'contain',
-                    backgroundColor: '#ffffff',
+                    backgroundColor: '#08090c',
                 },
             ],
         ],

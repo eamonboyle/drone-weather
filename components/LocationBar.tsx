@@ -57,29 +57,32 @@ export function LocationBar({ locationName }: LocationBarProps) {
 
     return (
         <>
-            <View className="flex-row items-center justify-between px-4 py-2 border-b border-gray-800">
+            <View className="flex-row items-center justify-between px-4 py-3 border-b border-white/5 bg-background">
                 <Pressable
                     onPress={handleSearchPress}
-                    className="w-10 h-10 items-center justify-center"
+                    className="w-10 h-10 items-center justify-center rounded-lg active:bg-surface/50"
                 >
-                    <Ionicons name="search" size={24} color="#3b82f6" />
+                    <Ionicons name="search" size={22} color="#f59e0b" />
                 </Pressable>
 
                 <View className="flex-1 items-center">
-                    <Text className="text-blue-500 text-xl font-semibold">
+                    <Text
+                        className="text-slate-100 text-lg font-semibold"
+                        style={{ fontFamily: 'Outfit-SemiBold' }}
+                    >
                         {locationName}
                     </Text>
                 </View>
 
                 <Pressable
                     onPress={handleLocationPress}
-                    className="w-10 h-10 items-center justify-center"
+                    className="w-10 h-10 items-center justify-center rounded-lg active:bg-surface/50"
                     disabled={isLoading}
                 >
                     {isLoading ? (
-                        <ActivityIndicator size="small" color="#3b82f6" />
+                        <ActivityIndicator size="small" color="#f59e0b" />
                     ) : (
-                        <Ionicons name="locate" size={24} color="#3b82f6" />
+                        <Ionicons name="locate" size={22} color="#f59e0b" />
                     )}
                 </Pressable>
             </View>

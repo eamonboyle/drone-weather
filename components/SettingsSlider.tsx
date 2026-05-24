@@ -33,16 +33,25 @@ export function SettingsSlider({
     sublabel,
 }: SettingsSliderProps) {
     return (
-        <View className="bg-gray-800/50 rounded-lg p-4 mb-3">
+        <View
+            className="rounded-xl p-4 mb-3"
+            style={{
+                backgroundColor: 'rgba(22, 26, 32, 0.6)',
+                borderWidth: 1,
+                borderColor: 'rgba(255, 255, 255, 0.06)',
+            }}
+        >
             <View className="flex-row items-center justify-between mb-2">
                 <View className="flex-row items-center flex-1">
                     <MaterialCommunityIcons
                         name={icon}
-                        size={24}
-                        color="#60A5FA"
-                        className="opacity-75"
+                        size={22}
+                        color="#f59e0b"
                     />
-                    <Text className="text-white text-lg font-semibold ml-2">
+                    <Text
+                        className="text-slate-100 text-base font-semibold ml-2"
+                        style={{ fontFamily: 'Outfit-SemiBold' }}
+                    >
                         {label}
                     </Text>
                 </View>
@@ -52,18 +61,24 @@ export function SettingsSlider({
                             <Pressable
                                 key={u}
                                 onPress={() => onUnitChange(u)}
-                                className={`px-3 py-1 rounded-lg ml-2 ${
+                                className={`px-3 py-1.5 rounded-lg ml-2 ${
                                     selectedUnit === u
-                                        ? 'bg-blue-600'
-                                        : 'bg-gray-700'
+                                        ? 'bg-amber-500'
+                                        : 'bg-slate-700/50'
                                 }`}
                             >
                                 <Text
-                                    className={`${
+                                    className={`text-sm ${
                                         selectedUnit === u
-                                            ? 'text-white'
-                                            : 'text-gray-400'
+                                            ? 'text-background font-semibold'
+                                            : 'text-slate-400'
                                     }`}
+                                    style={{
+                                        fontFamily:
+                                            selectedUnit === u
+                                                ? 'Outfit-SemiBold'
+                                                : 'DMSans',
+                                    }}
                                 >
                                     {u}
                                 </Text>
@@ -73,7 +88,10 @@ export function SettingsSlider({
                 )}
             </View>
             {sublabel && (
-                <Text className="text-gray-400 text-sm mb-2 ml-9">
+                <Text
+                    className="text-slate-500 text-sm mb-2 ml-9"
+                    style={{ fontFamily: 'DMSans' }}
+                >
                     {sublabel}
                 </Text>
             )}
@@ -85,13 +103,16 @@ export function SettingsSlider({
                         step={step}
                         value={value}
                         onValueChange={onValueChange}
-                        minimumTrackTintColor="#60A5FA"
-                        maximumTrackTintColor="#374151"
-                        thumbTintColor="#60A5FA"
+                        minimumTrackTintColor="#f59e0b"
+                        maximumTrackTintColor="#334155"
+                        thumbTintColor="#f59e0b"
                     />
                 </View>
                 <View className="ml-3 min-w-[60px]">
-                    <Text className="text-white text-lg text-right">
+                    <Text
+                        className="text-slate-100 text-base text-right"
+                        style={{ fontFamily: 'DMSans' }}
+                    >
                         {value}
                         {unit && ` ${unit}`}
                     </Text>
