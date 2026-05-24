@@ -15,12 +15,19 @@ import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
 import { LocationBar } from '@/components/LocationBar'
 import { useLocation } from '@/contexts/LocationContext'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { DroneFlyabilityService } from '@/services/droneFlyabilityService'
 import { HourlyWeatherData } from '@/types/weather'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useWeatherForLocation } from '@/hooks/useWeatherForLocation'
 import { formatWindSpeedMph } from '@/utils/windDisplay'
+import {
+    buildForecastPlanningSummary,
+    filterHoursByFlyability,
+    formatDayLabel,
+    formatWindowTimeRange,
+    ForecastFilter,
+} from '@/utils/forecastPlanning'
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true)
@@ -34,6 +41,60 @@ export default function ForecastTable() {
     const { width: screenWidth } = useWindowDimensions()
     const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
     const [expandedDay, setExpandedDay] = useState<string | null>(null)
+    const [flyabilityFilter, setFlyabilityFilter] =
+        useState<ForecastFilter>('all')
+
+    const filteredDays = useMemo(() => {
+        if (!weatherData) return [] as [string, HourlyWeatherData[]][]
+
+        const groupedByDay = weatherData.hourlyData.reduce(
+            (acc, hour) => {
+                if (isBefore(hour.time, startOfHour(new Date()))) return acc
+                const date = format(hour.time, 'yyyy-MM-dd')
+                if (!acc[date]) acc[date] = []
+                acc[date].push(hour)
+                return acc
+            },
+            {} as Record<string, HourlyWeatherData[]>
+        )
+
+        return Object.entries(groupedByDay).filter(
+            ([, hours]) => hours.length > 0
+        )
+    }, [weatherData])
+
+    const planningSummary = useMemo(
+        () =>
+            weatherData
+                ? buildForecastPlanningSummary(
+                      weatherData.hourlyData,
+                      filteredDays,
+                      thresholds
+                  )
+                : {
+                      nextWindow: { type: 'none' as const },
+                      bestDay: null,
+                  },
+        [weatherData, filteredDays, thresholds]
+    )
+
+    const displayDays = useMemo(
+        () =>
+            filteredDays
+                .map(
+                    ([date, hours]) =>
+                        [
+                            date,
+                            filterHoursByFlyability(
+                                hours,
+                                thresholds,
+                                flyabilityFilter
+                            ),
+                        ] as [string, HourlyWeatherData[]]
+                )
+                .filter(([, hours]) => hours.length > 0),
+        [filteredDays, thresholds, flyabilityFilter]
+    )
 
     if (isBootstrapping) {
         return (
@@ -76,21 +137,6 @@ export default function ForecastTable() {
         )
     }
 
-    const groupedByDay = weatherData.hourlyData.reduce(
-        (acc, hour) => {
-            if (isBefore(hour.time, startOfHour(new Date()))) return acc
-            const date = format(hour.time, 'yyyy-MM-dd')
-            if (!acc[date]) acc[date] = []
-            acc[date].push(hour)
-            return acc
-        },
-        {} as Record<string, HourlyWeatherData[]>
-    )
-
-    const filteredDays = Object.entries(groupedByDay).filter(
-        ([, hours]) => hours.length > 0
-    )
-
     const formatWind = (s: number) =>
         formatWindSpeedMph(s, thresholds.windSpeed.unit, 0).replace(
             /\s*(mph|km\/h)$/,
@@ -105,6 +151,53 @@ export default function ForecastTable() {
     return (
         <SafeAreaView className="flex-1 bg-background">
             <LocationBar locationName={locationName} />
+
+            <ForecastPlanningSummary summary={planningSummary} />
+
+            <View className="flex-row px-4 py-2 gap-2">
+                {(
+                    [
+                        { id: 'all', label: 'All' },
+                        { id: 'flyable', label: 'Flyable' },
+                        { id: 'blocked', label: 'Blocked' },
+                    ] as const
+                ).map(({ id, label }) => (
+                    <Pressable
+                        key={id}
+                        onPress={() => {
+                            LayoutAnimation.configureNext(
+                                LayoutAnimation.Presets.easeInEaseOut
+                            )
+                            setFlyabilityFilter(id)
+                        }}
+                        className="px-4 py-2 rounded-lg"
+                        style={{
+                            backgroundColor:
+                                flyabilityFilter === id
+                                    ? 'rgba(245, 158, 11, 0.2)'
+                                    : 'rgba(22, 26, 32, 0.6)',
+                            borderWidth: 1,
+                            borderColor:
+                                flyabilityFilter === id
+                                    ? 'rgba(245, 158, 11, 0.4)'
+                                    : 'rgba(255,255,255,0.06)',
+                        }}
+                    >
+                        <Text
+                            className="text-sm font-semibold"
+                            style={{
+                                fontFamily: 'Outfit-SemiBold',
+                                color:
+                                    flyabilityFilter === id
+                                        ? '#f59e0b'
+                                        : '#64748b',
+                            }}
+                        >
+                            {label}
+                        </Text>
+                    </Pressable>
+                ))}
+            </View>
 
             {/* View toggle */}
             <View className="flex-row justify-end px-4 py-2 gap-2">
@@ -170,13 +263,31 @@ export default function ForecastTable() {
                 </Pressable>
             </View>
 
-            {viewMode === 'cards' ? (
+            {displayDays.length === 0 ? (
+                <View className="flex-1 justify-center items-center px-6">
+                    <MaterialCommunityIcons
+                        name="calendar-search"
+                        size={48}
+                        color="#64748b"
+                    />
+                    <Text
+                        className="text-slate-400 text-lg text-center mt-4"
+                        style={{ fontFamily: 'DMSans' }}
+                    >
+                        {flyabilityFilter === 'flyable'
+                            ? 'No flyable hours in the forecast'
+                            : flyabilityFilter === 'blocked'
+                              ? 'No blocked hours in the forecast'
+                              : 'No forecast hours available'}
+                    </Text>
+                </View>
+            ) : viewMode === 'cards' ? (
                 <ScrollView
                     className="flex-1"
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={{ paddingBottom: 32 }}
                 >
-                    {filteredDays.map(([date, hours], dayIndex) => (
+                    {displayDays.map(([date, hours], dayIndex) => (
                         <DayCardStrip
                             key={date}
                             date={date}
@@ -200,7 +311,7 @@ export default function ForecastTable() {
                 </ScrollView>
             ) : (
                 <TableView
-                    filteredDays={filteredDays}
+                    filteredDays={displayDays}
                     thresholds={thresholds}
                     screenWidth={screenWidth}
                     formatWind={formatWind}
@@ -208,6 +319,64 @@ export default function ForecastTable() {
                 />
             )}
         </SafeAreaView>
+    )
+}
+
+interface ForecastPlanningSummaryProps {
+    summary: ReturnType<typeof buildForecastPlanningSummary>
+}
+
+function ForecastPlanningSummary({ summary }: ForecastPlanningSummaryProps) {
+    const { nextWindow, bestDay } = summary
+
+    let windowText = 'No safe flying window in the next 48 hours'
+    if (nextWindow.type === 'now' && nextWindow.durationHours) {
+        windowText = `Good to fly now · ${nextWindow.durationHours} hr${nextWindow.durationHours === 1 ? '' : 's'} ahead`
+    } else if (
+        nextWindow.type === 'upcoming' &&
+        nextWindow.startTime &&
+        nextWindow.endTime &&
+        nextWindow.durationHours
+    ) {
+        windowText = `Next window: ${formatDayLabel(format(nextWindow.startTime, 'yyyy-MM-dd'))} · ${formatWindowTimeRange(nextWindow.startTime, nextWindow.endTime)} (${nextWindow.durationHours} hr${nextWindow.durationHours === 1 ? '' : 's'})`
+    }
+
+    const bestDayText =
+        bestDay && bestDay.safeCount > 0
+            ? `Best day: ${formatDayLabel(bestDay.date)} · ${bestDay.safeCount}/${bestDay.totalHours} flyable`
+            : 'No flyable hours in upcoming forecast'
+
+    return (
+        <View
+            className="mx-4 mt-2 mb-1 p-4 rounded-xl"
+            style={{
+                backgroundColor: 'rgba(22, 26, 32, 0.6)',
+                borderWidth: 1,
+                borderColor: 'rgba(255, 255, 255, 0.06)',
+            }}
+        >
+            <View className="flex-row items-start">
+                <MaterialCommunityIcons
+                    name="calendar-clock"
+                    size={22}
+                    color="#f59e0b"
+                />
+                <View className="ml-3 flex-1">
+                    <Text
+                        className="text-slate-100 text-sm font-semibold"
+                        style={{ fontFamily: 'Outfit-SemiBold' }}
+                    >
+                        {windowText}
+                    </Text>
+                    <Text
+                        className="text-slate-500 text-sm mt-1"
+                        style={{ fontFamily: 'DMSans' }}
+                    >
+                        {bestDayText}
+                    </Text>
+                </View>
+            </View>
+        </View>
     )
 }
 
