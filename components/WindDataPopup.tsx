@@ -1,6 +1,10 @@
 import { View, Text, Modal, Pressable } from 'react-native'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
+import {
+    formatWindSpeedMph,
+    isWindWithinThreshold,
+} from '@/utils/windDisplay'
 
 interface WindDataPoint {
     height: string
@@ -23,24 +27,25 @@ export function WindDataPopup({
     data,
     title,
     icon,
-    unit = 'km/h',
     type,
 }: WindDataPopupProps) {
     const { thresholds } = useWeatherConfig()
 
-    const isSpeedSafe = (speed: number) => {
+    const isSpeedSafe = (speedMph: number) => {
         if (!thresholds) return false
-        return type === 'speed'
-            ? speed <= thresholds.windSpeed.max
-            : speed <= thresholds.windGust.max
+        const max =
+            type === 'speed'
+                ? thresholds.windSpeed.max
+                : thresholds.windGust.max
+        return isWindWithinThreshold(
+            speedMph,
+            max,
+            thresholds.windSpeed.unit
+        )
     }
 
-    const formatSpeed = (speed: number) => {
-        if (thresholds.windSpeed.unit === 'mph') {
-            return `${(speed * 0.621371).toFixed(1)} mph`
-        }
-        return `${speed.toFixed(1)} km/h`
-    }
+    const formatSpeed = (speedMph: number) =>
+        formatWindSpeedMph(speedMph, thresholds.windSpeed.unit)
 
     return (
         <Modal

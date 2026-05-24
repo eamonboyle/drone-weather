@@ -98,23 +98,110 @@ describe('DroneFlyabilityService', () => {
         expect(result.reasons.some((r) => r.includes('Visibility'))).toBe(true)
     })
 
-    it('flags cloud cover when it exceeds the maximum', () => {
+    it('does not flag cloud cover as unsafe regardless of threshold', () => {
         const thresholds = {
             ...DEFAULT_WEATHER_THRESHOLDS,
             weather: {
-                maxCloudCover: 50,
+                maxCloudCover: 10,
                 maxPrecipitationProbability: 50,
             },
         }
 
         const result = DroneFlyabilityService.checkFlyingConditions(
-            createHourData({ cloudCover: 80 }),
+            createHourData({ cloudCover: 100 }),
             thresholds
         )
 
-        expect(result.isSuitable).toBe(false)
-        expect(result.reasons.some((r) => r.includes('Cloud cover'))).toBe(
-            true
-        )
+        expect(result.isSuitable).toBe(true)
+        expect(result.reasons.some((r) => r.includes('Cloud cover'))).toBe(false)
+    })
+
+    describe('findNextSafeFlyingWindow', () => {
+        it('returns now when the current hour is safe', () => {
+            const now = new Date('2026-05-24T14:30:00')
+            const hourlyData = [
+                createHourData({ time: new Date('2026-05-24T14:00:00') }),
+                createHourData({ time: new Date('2026-05-24T15:00:00') }),
+            ]
+
+            const result = DroneFlyabilityService.findNextSafeFlyingWindow(
+                hourlyData,
+                DEFAULT_WEATHER_THRESHOLDS,
+                { from: now }
+            )
+
+            expect(result.type).toBe('now')
+            expect(result.durationHours).toBeGreaterThanOrEqual(1)
+        })
+
+        it('returns upcoming when the first safe hour is later', () => {
+            const now = new Date('2026-05-24T14:30:00')
+            const hourlyData = [
+                createHourData({
+                    time: new Date('2026-05-24T14:00:00'),
+                    windSpeed10m: 30,
+                }),
+                createHourData({
+                    time: new Date('2026-05-24T15:00:00'),
+                    windSpeed10m: 30,
+                }),
+                createHourData({ time: new Date('2026-05-24T16:00:00') }),
+                createHourData({ time: new Date('2026-05-24T17:00:00') }),
+            ]
+
+            const result = DroneFlyabilityService.findNextSafeFlyingWindow(
+                hourlyData,
+                DEFAULT_WEATHER_THRESHOLDS,
+                { from: now }
+            )
+
+            expect(result.type).toBe('upcoming')
+            expect(result.startTime?.getHours()).toBe(16)
+            expect(result.durationHours).toBe(2)
+        })
+
+        it('returns none when no hours are safe', () => {
+            const now = new Date('2026-05-24T14:30:00')
+            const hourlyData = [
+                createHourData({
+                    time: new Date('2026-05-24T14:00:00'),
+                    windSpeed10m: 30,
+                }),
+                createHourData({
+                    time: new Date('2026-05-24T15:00:00'),
+                    windSpeed10m: 30,
+                }),
+            ]
+
+            const result = DroneFlyabilityService.findNextSafeFlyingWindow(
+                hourlyData,
+                DEFAULT_WEATHER_THRESHOLDS,
+                { from: now }
+            )
+
+            expect(result.type).toBe('none')
+        })
+
+        it('handles ISO string times from cached weather data', () => {
+            const now = new Date('2026-05-24T14:30:00')
+            const hourlyData = [
+                createHourData({
+                    time: '2026-05-24T14:00:00' as unknown as Date,
+                }),
+                createHourData({
+                    time: '2026-05-24T15:00:00' as unknown as Date,
+                }),
+            ]
+
+            const result = DroneFlyabilityService.findNextSafeFlyingWindow(
+                hourlyData,
+                DEFAULT_WEATHER_THRESHOLDS,
+                { from: now }
+            )
+
+            expect(result.type).toBe('now')
+            expect(result.startTime).toBeInstanceOf(Date)
+            expect(result.endTime).toBeInstanceOf(Date)
+        })
     })
 })

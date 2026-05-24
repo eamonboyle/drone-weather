@@ -12,14 +12,15 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { format, isBefore, startOfHour } from 'date-fns'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
-import { useWeatherData } from '@/contexts/WeatherDataContext'
 import { LocationBar } from '@/components/LocationBar'
 import { useLocation } from '@/contexts/LocationContext'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { DroneFlyabilityService } from '@/services/droneFlyabilityService'
 import { HourlyWeatherData } from '@/types/weather'
 import { LinearGradient } from 'expo-linear-gradient'
+import { useWeatherForLocation } from '@/hooks/useWeatherForLocation'
+import { formatWindSpeedMph } from '@/utils/windDisplay'
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true)
@@ -28,18 +29,13 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 export default function ForecastTable() {
     const { locationName } = useLocation()
     const { thresholds } = useWeatherConfig()
-    const { weatherData } = useWeatherData()
+    const { weatherData, isBootstrapping, error, refetch } =
+        useWeatherForLocation()
     const { width: screenWidth } = useWindowDimensions()
-    const [isLoading, setIsLoading] = useState(true)
     const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
     const [expandedDay, setExpandedDay] = useState<string | null>(null)
 
-    useEffect(() => {
-        const timer = setTimeout(() => setIsLoading(false), 500)
-        return () => clearTimeout(timer)
-    }, [])
-
-    if (isLoading) {
+    if (isBootstrapping) {
         return (
             <SafeAreaView className="flex-1 bg-background">
                 <LocationBar locationName={locationName} />
@@ -52,13 +48,29 @@ export default function ForecastTable() {
         return (
             <SafeAreaView className="flex-1 bg-background">
                 <LocationBar locationName={locationName} />
-                <View className="flex-1 justify-center items-center">
+                <View className="flex-1 justify-center items-center px-6">
+                    <MaterialCommunityIcons
+                        name="cloud-off-outline"
+                        size={48}
+                        color="#64748b"
+                    />
                     <Text
-                        className="text-slate-400 text-lg"
+                        className="text-slate-400 text-lg text-center mt-4"
                         style={{ fontFamily: 'DMSans' }}
                     >
-                        No weather data available
+                        {error ?? 'No weather data available'}
                     </Text>
+                    <Pressable
+                        onPress={() => refetch()}
+                        className="mt-4 px-6 py-3 rounded-xl bg-amber-500"
+                    >
+                        <Text
+                            className="text-background font-semibold"
+                            style={{ fontFamily: 'Outfit-SemiBold' }}
+                        >
+                            Load Weather
+                        </Text>
+                    </Pressable>
                 </View>
             </SafeAreaView>
         )
@@ -80,9 +92,10 @@ export default function ForecastTable() {
     )
 
     const formatWind = (s: number) =>
-        thresholds.windSpeed.unit === 'mph'
-            ? (s * 0.621371).toFixed(0)
-            : s.toFixed(0)
+        formatWindSpeedMph(s, thresholds.windSpeed.unit, 0).replace(
+            /\s*(mph|km\/h)$/,
+            ''
+        )
 
     const formatTemp = (t: number) =>
         thresholds.temperature.unit === 'fahrenheit'
@@ -388,16 +401,18 @@ function TableView({
         width = 60,
     }: {
         value?: string | number
-        isSafe?: boolean | 'warning'
+        isSafe?: boolean | 'warning' | 'neutral'
         icon?: keyof typeof MaterialCommunityIcons.glyphMap
         width?: number
     }) => {
         const bg =
-            isSafe === 'warning'
-                ? 'rgba(120, 53, 15, 0.5)'
-                : isSafe
-                  ? 'rgba(6, 95, 70, 0.5)'
-                  : 'rgba(127, 29, 29, 0.5)'
+            isSafe === 'neutral'
+                ? 'rgba(22, 26, 32, 0.6)'
+                : isSafe === 'warning'
+                  ? 'rgba(120, 53, 15, 0.5)'
+                  : isSafe
+                    ? 'rgba(6, 95, 70, 0.5)'
+                    : 'rgba(127, 29, 29, 0.5)'
         return (
             <View
                 className="p-2 justify-center items-center border-r border-b border-white/5"
@@ -510,12 +525,7 @@ function TableView({
                                     />
                                     <TableCell
                                         value={`${hour.cloudCover}%`}
-                                        isSafe={
-                                            hour.cloudCover >=
-                                            thresholds.weather.maxCloudCover
-                                                ? 'warning'
-                                                : true
-                                        }
+                                        isSafe="neutral"
                                         width={cellWidth}
                                     />
                                     <TableCell

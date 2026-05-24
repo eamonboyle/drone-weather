@@ -205,7 +205,6 @@ export function WeatherDetailsModal({
     const isPrecipSafe =
         hourData.precipitationProbability <=
         thresholds.weather.maxPrecipitationProbability
-    const isCloudSafe = hourData.cloudCover <= thresholds.weather.maxCloudCover
 
     return (
         <Modal
@@ -308,7 +307,6 @@ export function WeatherDetailsModal({
                                 icon="weather-cloudy"
                                 label="Cloud Cover"
                                 value={cloudCover}
-                                isSafe={isCloudSafe ? true : 'warning'}
                             />
                         </ScrollView>
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState } from 'react'
 import {
     View,
     ScrollView,
@@ -14,6 +14,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
 import { WeatherDetailsModal } from './WeatherDetailsModal'
 import { DroneFlyabilityService } from '@/services/droneFlyabilityService'
+import { formatWindSpeedMph } from '@/utils/windDisplay'
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -22,7 +23,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 interface WeekViewProps {
     weatherData: WeatherData
-    onHourSelect: (hour: number) => void
+    onHourSelect?: (hour: number) => void
 }
 
 interface DayData {
@@ -86,7 +87,7 @@ export function WeekView({ weatherData, onHourSelect }: WeekViewProps) {
     const handleHourPress = (hour: HourlyWeatherData, index: number) => {
         setSelectedHour(hour)
         setIsModalVisible(true)
-        onHourSelect(index)
+        onHourSelect?.(index)
     }
 
     return (
@@ -245,15 +246,11 @@ function HourRow({ hourData, onPress, isAlternate }: HourRowProps) {
             ? ((hourData.temperature2m * 9) / 5 + 32).toFixed(0) + '°'
             : hourData.temperature2m.toFixed(0) + '°'
 
-    const windSpeed =
-        thresholds.windSpeed.unit === 'mph'
-            ? hourData.windSpeed10m * 0.621371
-            : hourData.windSpeed10m
-
-    const windDisplay =
-        thresholds.windSpeed.unit === 'mph'
-            ? `${windSpeed.toFixed(0)} mph`
-            : `${windSpeed.toFixed(0)} km/h`
+    const windDisplay = formatWindSpeedMph(
+        hourData.windSpeed10m,
+        thresholds.windSpeed.unit,
+        0
+    )
 
     const borderColor = conditions.isSuitable ? '#10b981' : '#ef4444'
 

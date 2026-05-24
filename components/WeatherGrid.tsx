@@ -94,7 +94,7 @@ export function WeatherGrid({ weatherData, selectedClockHour }: WeatherGridProps
     function isParameterSafe(
         parameter: string,
         value: number
-    ): 'safe' | 'warning' | 'unsafe' {
+    ): 'safe' | 'warning' | 'unsafe' | 'neutral' {
         if (!thresholds) return 'unsafe'
 
         switch (parameter) {
@@ -112,9 +112,7 @@ export function WeatherGrid({ weatherData, selectedClockHour }: WeatherGridProps
                     ? 'safe'
                     : 'unsafe'
             case 'Cloud Cover':
-                return value <= thresholds.weather.maxCloudCover
-                    ? 'safe'
-                    : 'warning'
+                return 'neutral'
             case 'Visibility':
                 return value >= thresholds.visibility.min * 1000
                     ? 'safe'
@@ -157,7 +155,13 @@ export function WeatherGrid({ weatherData, selectedClockHour }: WeatherGridProps
         )
     }
 
-    const getCardStyles = (safety: 'safe' | 'warning' | 'unsafe') => {
+    const getCardStyles = (safety: 'safe' | 'warning' | 'unsafe' | 'neutral') => {
+        if (safety === 'neutral') {
+            return {
+                borderColor: 'rgba(255, 255, 255, 0.08)',
+                backgroundColor: 'rgba(22, 26, 32, 0.6)',
+            }
+        }
         const borderColor =
             safety === 'safe'
                 ? 'rgba(16, 185, 129, 0.35)'
@@ -248,11 +252,13 @@ export function WeatherGrid({ weatherData, selectedClockHour }: WeatherGridProps
                     )
                     const cardStyles = getCardStyles(safety)
                     const iconColor =
-                        safety === 'safe'
-                            ? '#10b981'
-                            : safety === 'warning'
-                              ? '#f59e0b'
-                              : '#ef4444'
+                        safety === 'neutral'
+                            ? '#94a3b8'
+                            : safety === 'safe'
+                              ? '#10b981'
+                              : safety === 'warning'
+                                ? '#f59e0b'
+                                : '#ef4444'
 
                     const handlePress = () => {
                         if (item.label === 'Wind Speed') {

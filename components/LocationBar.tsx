@@ -1,12 +1,9 @@
 import { View, Text, Pressable, Alert, ActivityIndicator } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import * as Location from 'expo-location'
 import { useState } from 'react'
 import { useLocation } from '@/contexts/LocationContext'
-import { useWeatherData } from '@/contexts/WeatherDataContext'
-import { WeatherService } from '@/services/weatherService'
+import { useWeatherForLocation } from '@/hooks/useWeatherForLocation'
 import { LocationSearchModal } from './LocationSearchModal'
-import React from 'react'
 
 interface LocationBarProps {
     locationName: string
@@ -15,38 +12,20 @@ interface LocationBarProps {
 export function LocationBar({ locationName }: LocationBarProps) {
     const [isLoading, setIsLoading] = useState(false)
     const [isSearchModalVisible, setIsSearchModalVisible] = useState(false)
-    const { updateLocation } = useLocation()
-    const { setWeatherData } = useWeatherData()
+    const { refreshLocation } = useLocation()
+    const { refetch } = useWeatherForLocation()
 
     const handleSearchPress = () => {
         setIsSearchModalVisible(true)
     }
 
     const handleLocationPress = async () => {
-        if (isLoading) return // Prevent multiple presses while loading
+        if (isLoading) return
 
         setIsLoading(true)
         try {
-            // Get current device location
-            const { status } =
-                await Location.requestForegroundPermissionsAsync()
-
-            if (status !== 'granted') {
-                Alert.alert('Error', 'Permission to access location was denied')
-                return
-            }
-
-            const deviceLocation = await Location.getCurrentPositionAsync({})
-
-            // Update location in context
-            await updateLocation(deviceLocation)
-
-            // Fetch new weather data for device location
-            const weather = await WeatherService.getCurrentWeather(
-                deviceLocation.coords.latitude,
-                deviceLocation.coords.longitude
-            )
-            setWeatherData(weather)
+            await refreshLocation()
+            await refetch()
         } catch (error) {
             console.error('Error getting location:', error)
             Alert.alert('Error', 'Failed to get current location')
@@ -54,6 +33,10 @@ export function LocationBar({ locationName }: LocationBarProps) {
             setIsLoading(false)
         }
     }
+
+    const displayName =
+        locationName ||
+        (isLoading ? 'Updating location...' : 'Select Location')
 
     return (
         <>
@@ -70,7 +53,7 @@ export function LocationBar({ locationName }: LocationBarProps) {
                         className="text-slate-100 text-lg font-semibold"
                         style={{ fontFamily: 'Outfit-SemiBold' }}
                     >
-                        {locationName}
+                        {displayName}
                     </Text>
                 </View>
 

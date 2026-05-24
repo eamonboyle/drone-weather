@@ -1,24 +1,14 @@
 import {
-    StyleSheet,
-    Image,
-    Platform,
     View,
-    TextInput,
-    Alert,
     Text,
     Pressable,
+    Alert,
+    ScrollView,
 } from 'react-native'
 import { useState, useEffect } from 'react'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { ScrollView } from 'react-native-gesture-handler'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 
-import { Collapsible } from '@/components/Collapsible'
-import { ExternalLink } from '@/components/ExternalLink'
-import ParallaxScrollView from '@/components/ParallaxScrollView'
-import { ThemedText } from '@/components/ThemedText'
-import { ThemedView } from '@/components/ThemedView'
-import { IconSymbol } from '@/components/ui/IconSymbol'
 import { LocationBar } from '@/components/LocationBar'
 import { DroneProfileSelector } from '@/components/DroneProfileSelector'
 import {
@@ -26,93 +16,25 @@ import {
     DEFAULT_WEATHER_THRESHOLDS,
 } from '@/types/weatherConfig'
 import { WeatherConfigService } from '@/services/weatherConfigService'
-import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
+import {
+    useWeatherConfig,
+    thresholdsMatch,
+} from '@/contexts/WeatherConfigContext'
 import { useLocation } from '@/contexts/LocationContext'
 import { SettingsSlider } from '@/components/SettingsSlider'
-import { DroneProfile, DRONE_PROFILES } from '@/types/droneProfiles'
-
-interface SettingItemProps {
-    icon: keyof typeof MaterialCommunityIcons.glyphMap
-    label: string
-    value: string
-    onChangeText: (value: string) => void
-    unit: string
-    sublabel?: string
-}
-
-function SettingItem({
-    icon,
-    label,
-    value,
-    onChangeText,
-    unit,
-    sublabel,
-}: SettingItemProps) {
-    return (
-        <View
-            className="rounded-xl p-4 mb-3"
-            style={{
-                backgroundColor: 'rgba(22, 26, 32, 0.6)',
-                borderWidth: 1,
-                borderColor: 'rgba(255, 255, 255, 0.06)',
-            }}
-        >
-            <View className="flex-row items-center mb-2">
-                <MaterialCommunityIcons
-                    name={icon}
-                    size={22}
-                    color="#f59e0b"
-                />
-                <Text
-                    className="text-slate-100 text-base font-semibold ml-2"
-                    style={{ fontFamily: 'Outfit-SemiBold' }}
-                >
-                    {label}
-                </Text>
-            </View>
-            {sublabel && (
-                <Text
-                    className="text-slate-500 text-sm mb-2 ml-9"
-                    style={{ fontFamily: 'DMSans' }}
-                >
-                    {sublabel}
-                </Text>
-            )}
-            <View className="flex-row items-center ml-9">
-                <TextInput
-                    className="flex-1 text-slate-100 p-2.5 rounded-l-lg text-center text-base"
-                    style={{
-                        backgroundColor: 'rgba(30, 41, 59, 0.6)',
-                        fontFamily: 'DMSans',
-                    }}
-                    value={value}
-                    onChangeText={onChangeText}
-                    keyboardType="numeric"
-                />
-                <View
-                    className="px-3 py-2.5 rounded-r-lg"
-                    style={{ backgroundColor: 'rgba(51, 65, 85, 0.6)' }}
-                >
-                    <Text
-                        className="text-slate-400 text-base"
-                        style={{ fontFamily: 'DMSans' }}
-                    >
-                        {unit}
-                    </Text>
-                </View>
-            </View>
-        </View>
-    )
-}
+import { DroneProfile } from '@/types/droneProfiles'
 
 export default function SettingsScreen() {
     const [thresholds, setThresholds] = useState<WeatherThresholds>(
         DEFAULT_WEATHER_THRESHOLDS
     )
-    const [selectedDroneProfile, setSelectedDroneProfile] =
-        useState<DroneProfile | null>(null)
     const [isLoading, setIsLoading] = useState(true)
-    const { refreshThresholds, updateThresholds } = useWeatherConfig()
+    const {
+        selectedProfile,
+        updateThresholds,
+        setSelectedProfile,
+        clearSelectedProfile,
+    } = useWeatherConfig()
     const { locationName } = useLocation()
 
     useEffect(() => {
@@ -121,18 +43,8 @@ export default function SettingsScreen() {
 
     const loadThresholds = async () => {
         try {
-            const [loadedThresholds, profileId] = await Promise.all([
-                WeatherConfigService.getThresholds(),
-                WeatherConfigService.getSelectedProfileId(),
-            ])
+            const loadedThresholds = await WeatherConfigService.getThresholds()
             setThresholds(loadedThresholds)
-
-            if (profileId) {
-                const profile = DRONE_PROFILES.find((p) => p.id === profileId)
-                if (profile) {
-                    setSelectedDroneProfile(profile)
-                }
-            }
         } catch (error) {
             console.error('Error loading thresholds:', error)
             Alert.alert('Error', 'Failed to load weather thresholds')
@@ -147,7 +59,7 @@ export default function SettingsScreen() {
             const defaultThresholds =
                 await WeatherConfigService.resetToDefaults()
             setThresholds(defaultThresholds)
-            setSelectedDroneProfile(null)
+            await clearSelectedProfile()
             await updateThresholds(defaultThresholds)
             Alert.alert('Success', 'Weather thresholds reset to defaults')
         } catch (error) {
@@ -159,12 +71,8 @@ export default function SettingsScreen() {
 
     const handleDroneProfileSelect = async (profile: DroneProfile) => {
         try {
-            setSelectedDroneProfile(profile)
             setThresholds(profile.thresholds)
-            await Promise.all([
-                updateThresholds(profile.thresholds),
-                WeatherConfigService.saveSelectedProfileId(profile.id),
-            ])
+            await setSelectedProfile(profile)
             Alert.alert('Success', `Applied ${profile.name} profile settings`)
         } catch (error) {
             console.error('Error applying drone profile:', error)
@@ -186,6 +94,13 @@ export default function SettingsScreen() {
         }
         setThresholds(newThresholds)
         updateThresholds(newThresholds)
+
+        if (
+            selectedProfile &&
+            !thresholdsMatch(newThresholds, selectedProfile.thresholds)
+        ) {
+            clearSelectedProfile()
+        }
     }
 
     if (isLoading) {
@@ -208,7 +123,7 @@ export default function SettingsScreen() {
             <LocationBar locationName={locationName || 'Select Location'} />
             <ScrollView className="flex-1 px-4 pt-4">
                 <DroneProfileSelector
-                    selectedProfile={selectedDroneProfile}
+                    selectedProfile={selectedProfile}
                     onSelectProfile={handleDroneProfileSelect}
                 />
 
@@ -316,17 +231,6 @@ export default function SettingsScreen() {
                         Weather
                     </Text>
                     <SettingsSlider
-                        icon="weather-cloudy"
-                        label="Maximum Cloud Cover"
-                        value={thresholds.weather.maxCloudCover}
-                        onValueChange={(value) =>
-                            handleValueChange('weather', 'maxCloudCover', value)
-                        }
-                        minimumValue={0}
-                        maximumValue={100}
-                        unit="%"
-                    />
-                    <SettingsSlider
                         icon="weather-pouring"
                         label="Maximum Precipitation Probability"
                         value={thresholds.weather.maxPrecipitationProbability}
@@ -370,16 +274,3 @@ export default function SettingsScreen() {
         </SafeAreaView>
     )
 }
-
-const styles = StyleSheet.create({
-    headerImage: {
-        color: '#808080',
-        bottom: -90,
-        left: -35,
-        position: 'absolute',
-    },
-    titleContainer: {
-        flexDirection: 'row',
-        gap: 8,
-    },
-})

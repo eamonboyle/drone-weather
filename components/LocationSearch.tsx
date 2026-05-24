@@ -13,8 +13,6 @@ import {
     LocationSearchResult,
 } from '@/services/locationSearchService'
 import * as Location from 'expo-location'
-import { useWeatherData } from '@/contexts/WeatherDataContext'
-import { WeatherService } from '@/services/weatherService'
 import { useLocation } from '@/contexts/LocationContext'
 
 interface LocationSearchProps {
@@ -29,7 +27,6 @@ export function LocationSearch({ onLocationSelected }: LocationSearchProps) {
     const [selectingIndex, setSelectingIndex] = useState<number | null>(null)
     const [error, setError] = useState<string | null>(null)
     const { updateLocation } = useLocation()
-    const { setWeatherData } = useWeatherData()
 
     const handleSearch = async () => {
         if (!searchQuery.trim()) {
@@ -79,11 +76,6 @@ export function LocationSearch({ onLocationSelected }: LocationSearchProps) {
             }
 
             await updateLocation(mockLocation)
-            const weather = await WeatherService.getCurrentWeather(
-                result.latitude,
-                result.longitude
-            )
-            setWeatherData(weather)
 
             setResults([])
             setSearchQuery('')

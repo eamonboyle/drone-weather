@@ -1,32 +1,32 @@
 import {
     View,
     Text,
-    Alert,
     ActivityIndicator,
     Animated,
     KeyboardAvoidingView,
     Platform,
+    Pressable,
 } from 'react-native'
-import { useEffect, useState, useRef } from 'react'
-import * as Location from 'expo-location'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { DroneFlightConditions } from '@/types/weather'
 import { WeatherService } from '@/services/weatherService'
 import { LocationBar } from '@/components/LocationBar'
 import { WeatherGrid } from '@/components/WeatherGrid'
-import React from 'react'
 import { HourSelector } from '@/components/HourSelector'
 import { useLocation } from '@/contexts/LocationContext'
 import { LinearGradient } from 'expo-linear-gradient'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
-import { useRouter } from 'expo-router'
-import { useWeatherData } from '@/contexts/WeatherDataContext'
+import { useWeatherForLocation } from '@/hooks/useWeatherForLocation'
+import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
+import { DroneFlyabilityService } from '@/services/droneFlyabilityService'
+import { NextFlyWindow } from '@/components/NextFlyWindow'
 
 export default function Home() {
-    const router = useRouter()
-    const { location, locationName, errorMsg, updateLocation } = useLocation()
-    const { weatherData, setWeatherData } = useWeatherData()
-    const [isLoading, setIsLoading] = useState(true)
+    const { locationName, errorMsg, isLocating } = useLocation()
+    const { weatherData, isBootstrapping, error, refetch } =
+        useWeatherForLocation()
+    const { thresholds, selectedProfile } = useWeatherConfig()
     const [selectedHour, setSelectedHour] = useState(0)
     const [flightConditions, setFlightConditions] =
         useState<DroneFlightConditions>({
@@ -34,63 +34,31 @@ export default function Home() {
             reasons: [],
         })
 
-    // Animation values
     const fadeAnim = useRef(new Animated.Value(0)).current
     const translateY = useRef(new Animated.Value(20)).current
     const scaleAnim = useRef(new Animated.Value(0.9)).current
 
     useEffect(() => {
-        if (!isLoading) {
-            // Animate content in
-            Animated.parallel([
-                Animated.timing(fadeAnim, {
-                    toValue: 1,
-                    duration: 500,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(translateY, {
-                    toValue: 0,
-                    duration: 500,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(scaleAnim, {
-                    toValue: 1,
-                    duration: 500,
-                    useNativeDriver: true,
-                }),
-            ]).start()
-        }
-    }, [isLoading])
+        if (isBootstrapping) return
 
-    useEffect(() => {
-        if (location) {
-            handleLocationUpdate(location)
-        }
-    }, [location])
-
-    const handleLocationUpdate = async (location: Location.LocationObject) => {
-        setIsLoading(true)
-        try {
-            const weather = await WeatherService.getCurrentWeather(
-                location.coords.latitude,
-                location.coords.longitude
-            )
-            setWeatherData(weather)
-            const conditions = await WeatherService.isDroneFlyable(
-                weather,
-                selectedHour
-            )
-            setFlightConditions(conditions)
-        } catch (error) {
-            console.error('Error fetching weather data:', error)
-            Alert.alert(
-                'Error',
-                'Failed to fetch weather data. Please try again.'
-            )
-        } finally {
-            setIsLoading(false)
-        }
-    }
+        Animated.parallel([
+            Animated.timing(fadeAnim, {
+                toValue: 1,
+                duration: 500,
+                useNativeDriver: true,
+            }),
+            Animated.timing(translateY, {
+                toValue: 0,
+                duration: 500,
+                useNativeDriver: true,
+            }),
+            Animated.timing(scaleAnim, {
+                toValue: 1,
+                duration: 500,
+                useNativeDriver: true,
+            }),
+        ]).start()
+    }, [isBootstrapping, fadeAnim, scaleAnim, translateY])
 
     useEffect(() => {
         if (weatherData) {
@@ -105,41 +73,57 @@ export default function Home() {
         }
     }, [weatherData, selectedHour])
 
-    useEffect(() => {
-        ;(async () => {
-            const { status } =
-                await Location.requestForegroundPermissionsAsync()
-            if (status !== 'granted') {
-                console.error('Permission to access location was denied')
-                return
-            }
-
-            const location = await Location.getCurrentPositionAsync({})
-            await updateLocation()
-        })()
-    }, [])
+    const safeFlyingWindow = useMemo(() => {
+        if (!weatherData) return { type: 'none' as const }
+        return DroneFlyabilityService.findNextSafeFlyingWindow(
+            weatherData.hourlyData,
+            thresholds
+        )
+    }, [weatherData, thresholds])
 
     const renderLoadingState = () => (
-        <Animated.View
-            style={[
-                {
-                    flex: 1,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    opacity: fadeAnim,
-                    transform: [{ scale: scaleAnim }],
-                },
-            ]}
-        >
+        <View className="flex-1 justify-center items-center">
             <ActivityIndicator size="large" color="#f59e0b" />
             <Text
                 className="text-slate-300 text-lg mt-4"
                 style={{ fontFamily: 'DMSans-Medium' }}
             >
-                Loading weather data...
+                {isLocating
+                    ? 'Finding your location...'
+                    : 'Loading weather data...'}
             </Text>
-        </Animated.View>
+        </View>
     )
+
+    const renderErrorState = () => {
+        const message = error ?? errorMsg ?? 'Unable to load weather data'
+        return (
+            <View className="flex-1 justify-center items-center px-6">
+                <MaterialCommunityIcons
+                    name="cloud-alert"
+                    size={48}
+                    color="#f59e0b"
+                />
+                <Text
+                    className="text-slate-300 text-base text-center mt-4"
+                    style={{ fontFamily: 'DMSans' }}
+                >
+                    {message}
+                </Text>
+                <Pressable
+                    onPress={() => refetch()}
+                    className="mt-4 px-6 py-3 rounded-xl bg-amber-500"
+                >
+                    <Text
+                        className="text-background font-semibold"
+                        style={{ fontFamily: 'Outfit-SemiBold' }}
+                    >
+                        Retry
+                    </Text>
+                </Pressable>
+            </View>
+        )
+    }
 
     const renderFlightStatus = () => {
         const gradientColors = flightConditions.isSuitable
@@ -147,15 +131,7 @@ export default function Home() {
             : (['#7f1d1d', '#991b1b'] as const)
 
         return (
-            <Animated.View
-                style={[
-                    {
-                        marginBottom: 24,
-                        opacity: fadeAnim,
-                        transform: [{ translateY }],
-                    },
-                ]}
-            >
+            <View className="mb-6">
                 <LinearGradient
                     colors={gradientColors}
                     start={{ x: 0, y: 0 }}
@@ -212,55 +188,85 @@ export default function Home() {
                         </View>
                     )}
                 </LinearGradient>
-            </Animated.View>
+            </View>
         )
     }
 
+    const renderProfileChip = () => {
+        if (!selectedProfile) return null
+        return (
+            <View
+                className="flex-row items-center self-center mb-3 px-3 py-1.5 rounded-full"
+                style={{
+                    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                    borderWidth: 1,
+                    borderColor: 'rgba(245, 158, 11, 0.25)',
+                }}
+            >
+                <MaterialCommunityIcons
+                    name="quadcopter"
+                    size={14}
+                    color="#f59e0b"
+                />
+                <Text
+                    className="text-amber-400 text-xs ml-1.5"
+                    style={{ fontFamily: 'DMSans' }}
+                >
+                    {selectedProfile.name}
+                </Text>
+            </View>
+        )
+    }
+
+    const showError =
+        !isBootstrapping && (error || errorMsg) && !weatherData
+
     return (
         <SafeAreaView className="flex-1 bg-background">
-            <Animated.View style={[{ flex: 1, opacity: fadeAnim }]}>
-                <LocationBar locationName={locationName} />
+            <LocationBar locationName={locationName} />
 
-                <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                    style={{ flex: 1 }}
-                    keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-                >
-                    <View className="flex-1 px-4 pt-4">
-                        {isLoading ? (
-                            renderLoadingState()
-                        ) : (
-                            <>
-                                {renderFlightStatus()}
-
-                                {weatherData && (
-                                    <Animated.View
-                                        style={[
-                                            {
-                                                opacity: fadeAnim,
-                                                transform: [{ translateY }],
-                                            },
-                                        ]}
-                                    >
-                                        <WeatherGrid
-                                            weatherData={weatherData}
-                                            selectedClockHour={selectedHour}
-                                        />
-                                    </Animated.View>
-                                )}
-                            </>
-                        )}
-                    </View>
-                </KeyboardAvoidingView>
-
-                <View className="absolute bottom-0 left-0 right-0 bg-background">
-                    <Animated.View
-                        style={[
-                            {
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={{ flex: 1 }}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+            >
+                <View className="flex-1 px-4 pt-4">
+                    {isBootstrapping ? (
+                        renderLoadingState()
+                    ) : showError ? (
+                        renderErrorState()
+                    ) : weatherData ? (
+                        <Animated.View
+                            style={{
+                                flex: 1,
                                 opacity: fadeAnim,
                                 transform: [{ translateY }],
-                            },
-                        ]}
+                            }}
+                        >
+                            {renderFlightStatus()}
+                            {renderProfileChip()}
+                            <NextFlyWindow
+                                window={safeFlyingWindow}
+                                onSelectWindow={setSelectedHour}
+                            />
+                            <WeatherGrid
+                                weatherData={weatherData}
+                                selectedClockHour={selectedHour}
+                            />
+                        </Animated.View>
+                    ) : (
+                        renderErrorState()
+                    )}
+                </View>
+            </KeyboardAvoidingView>
+
+            {!showError && weatherData && (
+                <View className="absolute bottom-0 left-0 right-0 bg-background">
+                    <Animated.View
+                        style={{
+                            opacity: fadeAnim,
+                            transform: [{ translateY }],
+                        }}
                     >
                         <HourSelector
                             selectedHour={selectedHour}
@@ -269,7 +275,7 @@ export default function Home() {
                         />
                     </Animated.View>
                 </View>
-            </Animated.View>
+            )}
         </SafeAreaView>
     )
 }

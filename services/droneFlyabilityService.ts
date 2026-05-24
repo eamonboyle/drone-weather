@@ -6,12 +6,30 @@ import {
     convertDistance,
 } from '@/utils/unitConversion'
 import { API_WIND_UNIT } from '@/constants/weatherUnits'
+import { addHours, isBefore, startOfHour } from 'date-fns'
 
 export interface DroneFlightConditions {
     isSuitable: boolean
     reasons: string[]
     windSpeedDetails: { height: string; speed: number }[]
     windGustDetails: { height: string; speed: number }[]
+}
+
+export interface SafeFlyingWindow {
+    type: 'now' | 'upcoming' | 'none'
+    startTime?: Date
+    endTime?: Date
+    durationHours?: number
+}
+
+interface SafeBlock {
+    start: Date
+    end: Date
+    durationHours: number
+}
+
+function toHourDate(time: Date | string): Date {
+    return time instanceof Date ? time : new Date(time)
 }
 
 interface ConditionCheck {
@@ -123,31 +141,21 @@ function checkVisibility(
     }
 }
 
-function checkWeatherConditions(
-    cloudCover: number,
+function checkPrecipitation(
     precipitationProbability: number,
     thresholds: WeatherThresholds
-): ConditionCheck[] {
-    const checks: ConditionCheck[] = []
-
-    if (cloudCover > thresholds.weather.maxCloudCover) {
-        checks.push({
-            isSafe: false,
-            reason: `Cloud cover (${cloudCover.toFixed(0)}%) exceeds maximum (${thresholds.weather.maxCloudCover}%)`,
-        })
-    }
-
+): ConditionCheck | null {
     if (
         precipitationProbability >
         thresholds.weather.maxPrecipitationProbability
     ) {
-        checks.push({
+        return {
             isSafe: false,
             reason: `Precipitation probability (${precipitationProbability.toFixed(0)}%) exceeds maximum (${thresholds.weather.maxPrecipitationProbability}%)`,
-        })
+        }
     }
 
-    return checks
+    return null
 }
 
 function getWindDetails(hourData: HourlyWeatherData): {
@@ -179,12 +187,15 @@ export class DroneFlyabilityService {
             checkWindSpeed(hourData.windSpeed10m, thresholds),
             checkWindGust(hourData.windGusts10m, thresholds),
             checkVisibility(hourData.visibility, thresholds),
-            ...checkWeatherConditions(
-                hourData.cloudCover,
-                hourData.precipitationProbability,
-                thresholds
-            ),
         ]
+
+        const precipCheck = checkPrecipitation(
+            hourData.precipitationProbability,
+            thresholds
+        )
+        if (precipCheck) {
+            checks.push(precipCheck)
+        }
 
         checks.forEach((check) => {
             if (!check.isSafe && check.reason) {
@@ -197,6 +208,78 @@ export class DroneFlyabilityService {
             reasons,
             windSpeedDetails,
             windGustDetails,
+        }
+    }
+
+    static findNextSafeFlyingWindow(
+        hourlyData: HourlyWeatherData[],
+        thresholds: WeatherThresholds,
+        options?: { lookAheadHours?: number; from?: Date }
+    ): SafeFlyingWindow {
+        const lookAheadHours = options?.lookAheadHours ?? 48
+        const from = options?.from ?? new Date()
+        const fromHour = startOfHour(from)
+
+        const relevantHours = hourlyData
+            .filter((hour) => !isBefore(toHourDate(hour.time), fromHour))
+            .slice(0, lookAheadHours)
+
+        if (relevantHours.length === 0) {
+            return { type: 'none' }
+        }
+
+        const blocks: SafeBlock[] = []
+        let blockStart: Date | null = null
+        let blockCount = 0
+        let lastSafeTime: Date | null = null
+
+        for (const hourData of relevantHours) {
+            const hourTime = toHourDate(hourData.time)
+            const isSafe = DroneFlyabilityService.checkFlyingConditions(
+                hourData,
+                thresholds
+            ).isSuitable
+
+            if (isSafe) {
+                if (!blockStart) {
+                    blockStart = hourTime
+                }
+                blockCount++
+                lastSafeTime = hourTime
+            } else if (blockStart && lastSafeTime) {
+                blocks.push({
+                    start: blockStart,
+                    end: addHours(lastSafeTime, 1),
+                    durationHours: blockCount,
+                })
+                blockStart = null
+                blockCount = 0
+                lastSafeTime = null
+            }
+        }
+
+        if (blockStart && lastSafeTime) {
+            blocks.push({
+                start: blockStart,
+                end: addHours(lastSafeTime, 1),
+                durationHours: blockCount,
+            })
+        }
+
+        if (blocks.length === 0) {
+            return { type: 'none' }
+        }
+
+        const firstBlock = blocks[0]
+        const isNow =
+            firstBlock.start.getTime() <= fromHour.getTime() &&
+            firstBlock.end.getTime() > from.getTime()
+
+        return {
+            type: isNow ? 'now' : 'upcoming',
+            startTime: firstBlock.start,
+            endTime: firstBlock.end,
+            durationHours: firstBlock.durationHours,
         }
     }
 }
