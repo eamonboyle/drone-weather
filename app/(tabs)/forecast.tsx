@@ -13,6 +13,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { format, isBefore, startOfHour } from 'date-fns'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
 import { LocationBar } from '@/components/LocationBar'
+import { WeatherDetailsModal } from '@/components/WeatherDetailsModal'
 import { useLocation } from '@/contexts/LocationContext'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { useState, useMemo } from 'react'
@@ -40,9 +41,20 @@ export default function ForecastTable() {
         useWeatherForLocation()
     const { width: screenWidth } = useWindowDimensions()
     const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
-    const [expandedDay, setExpandedDay] = useState<string | null>(null)
+    const [expandedDay, setExpandedDay] = useState<string | null>(() =>
+        format(new Date(), 'yyyy-MM-dd')
+    )
     const [flyabilityFilter, setFlyabilityFilter] =
         useState<ForecastFilter>('all')
+    const [selectedHour, setSelectedHour] = useState<HourlyWeatherData | null>(
+        null
+    )
+    const [isModalVisible, setIsModalVisible] = useState(false)
+
+    const handleHourPress = (hour: HourlyWeatherData) => {
+        setSelectedHour(hour)
+        setIsModalVisible(true)
+    }
 
     const filteredDays = useMemo(() => {
         if (!weatherData) return [] as [string, HourlyWeatherData[]][]
@@ -287,13 +299,12 @@ export default function ForecastTable() {
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={{ paddingBottom: 32 }}
                 >
-                    {displayDays.map(([date, hours], dayIndex) => (
+                    {displayDays.map(([date, hours]) => (
                         <DayCardStrip
                             key={date}
                             date={date}
                             hours={hours}
                             thresholds={thresholds}
-                            screenWidth={screenWidth}
                             isExpanded={expandedDay === date}
                             onToggle={() => {
                                 LayoutAnimation.configureNext(
@@ -305,7 +316,7 @@ export default function ForecastTable() {
                             }}
                             formatWind={formatWind}
                             formatTemp={formatTemp}
-                            offsetLeft={dayIndex % 2 === 1}
+                            onHourPress={handleHourPress}
                         />
                     ))}
                 </ScrollView>
@@ -316,8 +327,15 @@ export default function ForecastTable() {
                     screenWidth={screenWidth}
                     formatWind={formatWind}
                     formatTemp={formatTemp}
+                    onHourPress={handleHourPress}
                 />
             )}
+
+            <WeatherDetailsModal
+                isVisible={isModalVisible}
+                onClose={() => setIsModalVisible(false)}
+                hourData={selectedHour}
+            />
         </SafeAreaView>
     )
 }
@@ -385,50 +403,51 @@ interface DayCardStripProps {
     date: string
     hours: HourlyWeatherData[]
     thresholds: ReturnType<typeof useWeatherConfig>['thresholds']
-    screenWidth: number
     isExpanded: boolean
     onToggle: () => void
     formatWind: (s: number) => string
     formatTemp: (t: number) => string
-    offsetLeft: boolean
+    onHourPress: (hour: HourlyWeatherData) => void
 }
 
 function DayCardStrip({
     date,
     hours,
     thresholds,
-    screenWidth,
     isExpanded,
     onToggle,
     formatWind,
     formatTemp,
-    offsetLeft,
+    onHourPress,
 }: DayCardStripProps) {
+    const isToday = date === format(new Date(), 'yyyy-MM-dd')
     const safeCount = hours.filter((h) =>
         DroneFlyabilityService.checkFlyingConditions(h, thresholds).isSuitable
     ).length
 
     return (
         <View
-            className="mb-4 rounded-2xl overflow-hidden mx-4"
+            className="mb-3 mx-4 rounded-2xl overflow-hidden"
             style={{
                 backgroundColor: 'rgba(22, 26, 32, 0.5)',
                 borderWidth: 1,
-                borderColor: 'rgba(255, 255, 255, 0.06)',
-                marginLeft: offsetLeft ? 28 : 16,
-                marginRight: offsetLeft ? 16 : 28,
+                borderColor: isToday
+                    ? 'rgba(245, 158, 11, 0.25)'
+                    : 'rgba(255, 255, 255, 0.06)',
             }}
         >
             <Pressable
                 onPress={onToggle}
                 className="flex-row items-center justify-between px-4 py-3"
                 style={{
-                    backgroundColor: 'rgba(15, 17, 21, 0.9)',
+                    backgroundColor: isToday
+                        ? 'rgba(245, 158, 11, 0.12)'
+                        : 'rgba(15, 17, 21, 0.9)',
                     borderBottomWidth: isExpanded ? 1 : 0,
                     borderBottomColor: 'rgba(255, 255, 255, 0.06)',
                 }}
             >
-                <View>
+                <View className="flex-1">
                     <Text
                         className="text-slate-100 font-semibold"
                         style={{ fontFamily: 'Outfit-SemiBold' }}
@@ -443,11 +462,32 @@ function DayCardStrip({
                         {hours.length} flyable
                     </Text>
                 </View>
-                <MaterialCommunityIcons
-                    name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                    size={20}
-                    color="#f59e0b"
-                />
+                <View className="flex-row items-center gap-2">
+                    <View
+                        className="px-2.5 py-1 rounded-full"
+                        style={{
+                            backgroundColor:
+                                safeCount > 0
+                                    ? 'rgba(16, 185, 129, 0.2)'
+                                    : 'rgba(239, 68, 68, 0.2)',
+                        }}
+                    >
+                        <Text
+                            className="text-xs font-medium"
+                            style={{
+                                fontFamily: 'Outfit-SemiBold',
+                                color: safeCount > 0 ? '#10b981' : '#ef4444',
+                            }}
+                        >
+                            {safeCount > 0 ? 'GO' : 'NO'}
+                        </Text>
+                    </View>
+                    <MaterialCommunityIcons
+                        name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                        size={20}
+                        color="#f59e0b"
+                    />
+                </View>
             </Pressable>
 
             {!isExpanded ? (
@@ -466,31 +506,35 @@ function DayCardStrip({
                             ? (['#065f46', '#047857'] as const)
                             : (['#991b1b', '#b91c1c'] as const)
                         return (
-                            <LinearGradient
+                            <Pressable
                                 key={i}
-                                colors={colors}
-                                className="rounded-lg px-3 py-2 mr-2"
-                                style={{
-                                    minWidth: 56,
-                                    borderWidth: 1,
-                                    borderColor: 'rgba(255,255,255,0.08)',
-                                }}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
+                                onPress={() => onHourPress(hour)}
                             >
-                                <Text
-                                    className="text-white/90 text-xs"
-                                    style={{ fontFamily: 'DMSans' }}
+                                <LinearGradient
+                                    colors={colors}
+                                    className="rounded-lg px-3 py-2 mr-2"
+                                    style={{
+                                        minWidth: 56,
+                                        borderWidth: 1,
+                                        borderColor: 'rgba(255,255,255,0.08)',
+                                    }}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
                                 >
-                                    {format(hour.time, 'HH:mm')}
-                                </Text>
-                                <Text
-                                    className="text-white font-bold text-sm"
-                                    style={{ fontFamily: 'Outfit-SemiBold' }}
-                                >
-                                    {formatTemp(hour.temperature2m)}°
-                                </Text>
-                            </LinearGradient>
+                                    <Text
+                                        className="text-white/90 text-xs"
+                                        style={{ fontFamily: 'DMSans' }}
+                                    >
+                                        {format(hour.time, 'HH:mm')}
+                                    </Text>
+                                    <Text
+                                        className="text-white font-bold text-sm"
+                                        style={{ fontFamily: 'Outfit-SemiBold' }}
+                                    >
+                                        {formatTemp(hour.temperature2m)}°
+                                    </Text>
+                                </LinearGradient>
+                            </Pressable>
                         )
                     })}
                 </ScrollView>
@@ -503,8 +547,9 @@ function DayCardStrip({
                         )
                         const borderColor = cond.isSuitable ? '#10b981' : '#ef4444'
                         return (
-                            <View
+                            <Pressable
                                 key={i}
+                                onPress={() => onHourPress(hour)}
                                 className="flex-row items-center px-4 py-3.5"
                                 style={{
                                     backgroundColor: i % 2 === 1 ? 'rgba(255, 255, 255, 0.02)' : 'transparent',
@@ -537,7 +582,7 @@ function DayCardStrip({
                                         {formatWind(hour.windSpeed10m)} / {formatWind(hour.windGusts10m)}
                                     </Text>
                                 </View>
-                            </View>
+                            </Pressable>
                         )
                     })}
                 </View>
@@ -553,12 +598,14 @@ function TableView({
     screenWidth,
     formatWind,
     formatTemp,
+    onHourPress,
 }: {
     filteredDays: [string, HourlyWeatherData[]][]
     thresholds: ReturnType<typeof useWeatherConfig>['thresholds']
     screenWidth: number
     formatWind: (s: number) => string
     formatTemp: (t: number) => string
+    onHourPress: (hour: HourlyWeatherData) => void
 }) {
     const timeWidth = 80
     const cellWidth = (screenWidth - timeWidth) / 5
@@ -641,10 +688,18 @@ function TableView({
                 </View>
             </View>
             <ScrollView>
-                {filteredDays.map(([date, hours]) => (
+                {filteredDays.map(([date, hours]) => {
+                    const safeCount = hours.filter((h) =>
+                        DroneFlyabilityService.checkFlyingConditions(
+                            h,
+                            thresholds
+                        ).isSuitable
+                    ).length
+
+                    return (
                     <View key={date}>
                         <View
-                            className="flex-row border-t border-b border-white/5 py-3 px-4"
+                            className="flex-row items-center justify-between border-t border-b border-white/5 py-3 px-4"
                             style={{
                                 width: screenWidth,
                                 backgroundColor: 'rgba(15, 17, 21, 0.98)',
@@ -656,6 +711,25 @@ function TableView({
                             >
                                 {format(new Date(date), 'EEEE, MMMM d')}
                             </Text>
+                            <View
+                                className="px-2.5 py-1 rounded-full"
+                                style={{
+                                    backgroundColor:
+                                        safeCount > 0
+                                            ? 'rgba(16, 185, 129, 0.2)'
+                                            : 'rgba(239, 68, 68, 0.2)',
+                                }}
+                            >
+                                <Text
+                                    className="text-xs font-medium"
+                                    style={{
+                                        fontFamily: 'Outfit-SemiBold',
+                                        color: safeCount > 0 ? '#10b981' : '#ef4444',
+                                    }}
+                                >
+                                    {safeCount > 0 ? 'GO' : 'NO'}
+                                </Text>
+                            </View>
                         </View>
                         {hours.map((hour, i) => {
                             const cond = DroneFlyabilityService.checkFlyingConditions(
@@ -663,7 +737,11 @@ function TableView({
                                 thresholds
                             )
                             return (
-                                <View key={i} className="flex-row">
+                                <Pressable
+                                    key={i}
+                                    className="flex-row"
+                                    onPress={() => onHourPress(hour)}
+                                >
                                     <TableCell value={format(hour.time, 'HH:mm')} width={timeWidth} />
                                     <TableCell
                                         value={formatTemp(hour.temperature2m)}
@@ -706,11 +784,12 @@ function TableView({
                                         }
                                         width={cellWidth}
                                     />
-                                </View>
+                                </Pressable>
                             )
                         })}
                     </View>
-                ))}
+                    )
+                })}
             </ScrollView>
         </>
     )

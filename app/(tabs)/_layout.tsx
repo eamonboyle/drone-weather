@@ -54,20 +54,6 @@ export default function TabLayout() {
                     }}
                 />
                 <Tabs.Screen
-                    name="week"
-                    options={{
-                        title: 'Week',
-                        tabBarIcon: ({ color, size }) => (
-                            <Ionicons
-                                name="calendar"
-                                size={size}
-                                color={color}
-                            />
-                        ),
-                        headerShown: false,
-                    }}
-                />
-                <Tabs.Screen
                     name="forecast"
                     options={{
                         title: 'Forecast',
