@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar'
 import { useEffect } from 'react'
 import 'react-native-reanimated'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
+import { enableFreeze } from 'react-native-screens'
 import { LocationProvider } from '@/contexts/LocationContext'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import {
@@ -36,6 +37,8 @@ export const unstable_settings = {
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync()
+
+enableFreeze(true)
 
 export default function RootLayout() {
     const [loaded, error] = useFonts({
@@ -76,11 +79,21 @@ export default function RootLayout() {
                                         headerShown: false,
                                         contentStyle: { backgroundColor: '#08090c' },
                                         animation: 'default',
+                                        freezeOnBlur: true,
                                     }}
                                 >
                                     <Stack.Screen
                                         name="(tabs)"
                                         options={{ headerShown: false }}
+                                    />
+                                    <Stack.Screen
+                                        name="location"
+                                        options={{
+                                            headerShown: false,
+                                            animation: 'simple_push',
+                                            presentation: 'card',
+                                            freezeOnBlur: true,
+                                        }}
                                     />
                                 </Stack>
                                 <StatusBar style="light" />

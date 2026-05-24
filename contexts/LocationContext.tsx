@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Location from 'expo-location'
+import { formatPlaceName } from '@/utils/locationFormatting'
 
 const LAST_LOCATION_KEY = 'last_known_location'
 
@@ -53,23 +54,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
             })
 
             if (place) {
-                const locality =
-                    place.city ||
-                    place.district ||
-                    place.subregion ||
-                    place.region ||
-                    ''
-                const country = place.country || ''
-
-                if (locality && country) {
-                    setLocationName(`${locality}, ${country}`)
-                } else if (locality) {
-                    setLocationName(locality)
-                } else if (country) {
-                    setLocationName(country)
-                } else {
-                    setLocationName('Location name unavailable')
-                }
+                setLocationName(formatPlaceName(place))
             } else {
                 setLocationName('Location name unavailable')
             }

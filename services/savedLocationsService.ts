@@ -9,7 +9,7 @@ export interface StoredLocation extends LocationSearchResult {
 const CONFIG = {
     RECENTS_KEY: 'location_recents',
     FAVORITES_KEY: 'location_favorites',
-    MAX_RECENTS: 8,
+    MAX_RECENTS: 12,
 } as const
 
 function locationId(latitude: number, longitude: number): string {
