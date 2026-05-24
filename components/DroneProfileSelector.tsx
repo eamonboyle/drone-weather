@@ -6,10 +6,9 @@ import {
     Pressable,
     Modal,
     ScrollView,
-    StyleSheet,
 } from 'react-native'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
-import { DroneProfile, DRONE_PROFILES } from '@/types/droneProfiles'
+import { DroneProfile, DRONE_PROFILES, sortProfilesByReleaseYear } from '@/types/droneProfiles'
 
 interface DroneProfileSelectorProps {
     selectedProfile: DroneProfile | null
@@ -21,6 +20,10 @@ export function DroneProfileSelector({
     onSelectProfile,
 }: DroneProfileSelectorProps) {
     const [isModalVisible, setIsModalVisible] = React.useState(false)
+    const sortedProfiles = React.useMemo(
+        () => sortProfilesByReleaseYear(DRONE_PROFILES),
+        []
+    )
 
     return (
         <View className="mb-6">
@@ -59,7 +62,8 @@ export function DroneProfileSelector({
                                 className="text-slate-500 text-sm"
                                 style={{ fontFamily: 'DMSans' }}
                             >
-                                {selectedProfile.manufacturer}
+                                {selectedProfile.manufacturer} ·{' '}
+                                {selectedProfile.releaseYear}
                             </Text>
                         </View>
                     </View>
@@ -111,7 +115,7 @@ export function DroneProfileSelector({
                         </View>
 
                         <ScrollView className="flex-1 p-4">
-                            {DRONE_PROFILES.map((profile) => (
+                            {sortedProfiles.map((profile) => (
                                 <Pressable
                                     key={profile.id}
                                     onPress={() => {
@@ -140,7 +144,9 @@ export function DroneProfileSelector({
                                     <View className="flex-1">
                                         <Text
                                             className="text-slate-100 text-base font-semibold"
-                                            style={{ fontFamily: 'Outfit-SemiBold' }}
+                                            style={{
+                                                fontFamily: 'Outfit-SemiBold',
+                                            }}
                                         >
                                             {profile.name}
                                         </Text>
@@ -148,39 +154,38 @@ export function DroneProfileSelector({
                                             className="text-slate-500 text-sm"
                                             style={{ fontFamily: 'DMSans' }}
                                         >
-                                            {profile.manufacturer} •{' '}
-                                            {profile.model}
+                                            {profile.manufacturer} ·{' '}
+                                            {profile.releaseYear}
                                         </Text>
                                         <View className="flex-row mt-2">
                                             <Text
                                                 className="text-slate-500 text-xs"
                                                 style={{ fontFamily: 'DMSans' }}
                                             >
-                                                Max Wind:{' '}
-                                                {
-                                                    profile.thresholds.windSpeed
-                                                        .max
-                                                }{' '}
+                                                {profile.thresholds.windSpeed
+                                                    .max}{' '}
                                                 {
                                                     profile.thresholds.windSpeed
                                                         .unit
-                                                }
+                                                }{' '}
+                                                max wind
                                             </Text>
                                             <Text
                                                 className="text-slate-500 text-xs ml-4"
-                                                style={{ fontFamily: 'DMSans' }}
+                                                style={{
+                                                    fontFamily: 'DMSans',
+                                                }}
                                             >
-                                                Temp:{' '}
                                                 {
                                                     profile.thresholds
                                                         .temperature.min
                                                 }
-                                                °-
+                                                ° to{' '}
                                                 {
                                                     profile.thresholds
                                                         .temperature.max
                                                 }
-                                                °
+                                                °C
                                             </Text>
                                         </View>
                                     </View>
