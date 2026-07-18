@@ -1,12 +1,13 @@
 import { DroneFlyabilityService } from '../droneFlyabilityService'
 import { HourlyWeatherData } from '@/types/weather'
 import { DEFAULT_WEATHER_THRESHOLDS } from '@/types/weatherConfig'
+import { getCheckStatus } from '@/utils/flyabilityChecks'
 
 function createHourData(
     overrides: Partial<HourlyWeatherData> = {}
 ): HourlyWeatherData {
     return {
-        time: new Date('2026-05-24T12:00:00'),
+        time: new Date('2026-05-24T12:00:00Z'),
         temperature2m: 20,
         relativeHumidity2m: 50,
         dewPoint2m: 10,
@@ -51,6 +52,8 @@ describe('DroneFlyabilityService', () => {
 
         expect(result.isSuitable).toBe(true)
         expect(result.reasons).toHaveLength(0)
+        expect(result.checks).toHaveLength(5)
+        expect(result.checks.every((c) => c.status === 'safe')).toBe(true)
     })
 
     it('flags wind speed when API mph exceeds km/h threshold', () => {
@@ -65,10 +68,11 @@ describe('DroneFlyabilityService', () => {
         )
 
         expect(result.isSuitable).toBe(false)
-        expect(result.reasons.some((r) => r.includes('Wind speed'))).toBe(true)
+        expect(getCheckStatus(result, 'windSpeed')).toBe('unsafe')
+        expect(getCheckStatus(result, 'windGust')).toBe('safe')
     })
 
-    it('flags wind gusts when they exceed the maximum', () => {
+    it('flags wind gusts independently of wind speed', () => {
         const thresholds = {
             ...DEFAULT_WEATHER_THRESHOLDS,
             windGust: { max: 20 },
@@ -80,10 +84,11 @@ describe('DroneFlyabilityService', () => {
         )
 
         expect(result.isSuitable).toBe(false)
-        expect(result.reasons.some((r) => r.includes('Wind gusts'))).toBe(true)
+        expect(getCheckStatus(result, 'windGust')).toBe('unsafe')
+        expect(getCheckStatus(result, 'windSpeed')).toBe('safe')
     })
 
-    it('converts visibility from meters to kilometers before comparing', () => {
+    it('converts visibility from meters before comparing', () => {
         const thresholds = {
             ...DEFAULT_WEATHER_THRESHOLDS,
             visibility: { unit: 'kilometers' as const, min: 5 },
@@ -95,7 +100,46 @@ describe('DroneFlyabilityService', () => {
         )
 
         expect(result.isSuitable).toBe(false)
-        expect(result.reasons.some((r) => r.includes('Visibility'))).toBe(true)
+        expect(getCheckStatus(result, 'visibility')).toBe('unsafe')
+    })
+
+    it('treats Fahrenheit thresholds correctly against Celsius API values', () => {
+        const thresholds = {
+            ...DEFAULT_WEATHER_THRESHOLDS,
+            temperature: {
+                unit: 'fahrenheit' as const,
+                min: 50,
+                max: 86,
+            },
+        }
+
+        const safe = DroneFlyabilityService.checkFlyingConditions(
+            createHourData({ temperature2m: 20 }),
+            thresholds
+        )
+        expect(getCheckStatus(safe, 'temperature')).toBe('safe')
+
+        const unsafe = DroneFlyabilityService.checkFlyingConditions(
+            createHourData({ temperature2m: 5 }),
+            thresholds
+        )
+        expect(getCheckStatus(unsafe, 'temperature')).toBe('unsafe')
+    })
+
+    it('marks missing safety-critical fields unavailable, never safe', () => {
+        const result = DroneFlyabilityService.checkFlyingConditions(
+            createHourData({
+                temperature2m: null,
+                windSpeed10m: null,
+                visibility: null,
+            }),
+            DEFAULT_WEATHER_THRESHOLDS
+        )
+
+        expect(result.isSuitable).toBe(false)
+        expect(getCheckStatus(result, 'temperature')).toBe('unavailable')
+        expect(getCheckStatus(result, 'windSpeed')).toBe('unavailable')
+        expect(getCheckStatus(result, 'visibility')).toBe('unavailable')
     })
 
     it('does not flag cloud cover as unsafe regardless of threshold', () => {
@@ -113,15 +157,39 @@ describe('DroneFlyabilityService', () => {
         )
 
         expect(result.isSuitable).toBe(true)
-        expect(result.reasons.some((r) => r.includes('Cloud cover'))).toBe(false)
+        expect(
+            result.checks.some((c) => c.factor === ('cloudCover' as never))
+        ).toBe(false)
+        expect(result.reasons.some((r) => r.includes('Cloud cover'))).toBe(
+            false
+        )
+    })
+
+    it('allows zero precipitation and wind thresholds', () => {
+        const thresholds = {
+            ...DEFAULT_WEATHER_THRESHOLDS,
+            windSpeed: { unit: 'kmh' as const, max: 0 },
+            weather: {
+                maxCloudCover: 100,
+                maxPrecipitationProbability: 0,
+            },
+        }
+
+        const result = DroneFlyabilityService.checkFlyingConditions(
+            createHourData({ windSpeed10m: 1, precipitationProbability: 1 }),
+            thresholds
+        )
+
+        expect(getCheckStatus(result, 'windSpeed')).toBe('unsafe')
+        expect(getCheckStatus(result, 'precipitation')).toBe('unsafe')
     })
 
     describe('findNextSafeFlyingWindow', () => {
         it('returns now when the current hour is safe', () => {
-            const now = new Date('2026-05-24T14:30:00')
+            const now = new Date('2026-05-24T14:30:00Z')
             const hourlyData = [
-                createHourData({ time: new Date('2026-05-24T14:00:00') }),
-                createHourData({ time: new Date('2026-05-24T15:00:00') }),
+                createHourData({ time: new Date('2026-05-24T14:00:00Z') }),
+                createHourData({ time: new Date('2026-05-24T15:00:00Z') }),
             ]
 
             const result = DroneFlyabilityService.findNextSafeFlyingWindow(
@@ -135,18 +203,18 @@ describe('DroneFlyabilityService', () => {
         })
 
         it('returns upcoming when the first safe hour is later', () => {
-            const now = new Date('2026-05-24T14:30:00')
+            const now = new Date('2026-05-24T14:30:00Z')
             const hourlyData = [
                 createHourData({
-                    time: new Date('2026-05-24T14:00:00'),
+                    time: new Date('2026-05-24T14:00:00Z'),
                     windSpeed10m: 30,
                 }),
                 createHourData({
-                    time: new Date('2026-05-24T15:00:00'),
+                    time: new Date('2026-05-24T15:00:00Z'),
                     windSpeed10m: 30,
                 }),
-                createHourData({ time: new Date('2026-05-24T16:00:00') }),
-                createHourData({ time: new Date('2026-05-24T17:00:00') }),
+                createHourData({ time: new Date('2026-05-24T16:00:00Z') }),
+                createHourData({ time: new Date('2026-05-24T17:00:00Z') }),
             ]
 
             const result = DroneFlyabilityService.findNextSafeFlyingWindow(
@@ -156,19 +224,21 @@ describe('DroneFlyabilityService', () => {
             )
 
             expect(result.type).toBe('upcoming')
-            expect(result.startTime?.getHours()).toBe(16)
+            expect(result.startTime?.toISOString()).toBe(
+                '2026-05-24T16:00:00.000Z'
+            )
             expect(result.durationHours).toBe(2)
         })
 
         it('returns none when no hours are safe', () => {
-            const now = new Date('2026-05-24T14:30:00')
+            const now = new Date('2026-05-24T14:30:00Z')
             const hourlyData = [
                 createHourData({
-                    time: new Date('2026-05-24T14:00:00'),
+                    time: new Date('2026-05-24T14:00:00Z'),
                     windSpeed10m: 30,
                 }),
                 createHourData({
-                    time: new Date('2026-05-24T15:00:00'),
+                    time: new Date('2026-05-24T15:00:00Z'),
                     windSpeed10m: 30,
                 }),
             ]
@@ -183,13 +253,13 @@ describe('DroneFlyabilityService', () => {
         })
 
         it('handles ISO string times from cached weather data', () => {
-            const now = new Date('2026-05-24T14:30:00')
+            const now = new Date('2026-05-24T14:30:00Z')
             const hourlyData = [
                 createHourData({
-                    time: '2026-05-24T14:00:00' as unknown as Date,
+                    time: '2026-05-24T14:00:00.000Z' as unknown as Date,
                 }),
                 createHourData({
-                    time: '2026-05-24T15:00:00' as unknown as Date,
+                    time: '2026-05-24T15:00:00.000Z' as unknown as Date,
                 }),
             ]
 

@@ -1,7 +1,10 @@
-import { format, isToday, isTomorrow } from 'date-fns'
 import { DroneFlyabilityService } from '@/services/droneFlyabilityService'
 import { HourlyWeatherData } from '@/types/weather'
 import { WeatherThresholds } from '@/types/weatherConfig'
+import {
+    formatLocationDayLabel,
+    formatLocationTimeRange,
+} from '@/utils/locationTime'
 
 export type ForecastFilter = 'all' | 'flyable' | 'blocked'
 
@@ -82,13 +85,18 @@ export function buildForecastPlanningSummary(
     }
 }
 
-export function formatDayLabel(dateStr: string): string {
-    const date = new Date(dateStr)
-    if (isToday(date)) return 'Today'
-    if (isTomorrow(date)) return 'Tomorrow'
-    return format(date, 'EEE, MMM d')
+export function formatDayLabel(
+    dayKey: string,
+    utcOffsetSeconds: number,
+    now: Date = new Date()
+): string {
+    return formatLocationDayLabel(dayKey, utcOffsetSeconds, now)
 }
 
-export function formatWindowTimeRange(start: Date, end: Date): string {
-    return `${format(start, 'h a')} – ${format(end, 'h a')}`
+export function formatWindowTimeRange(
+    start: Date,
+    end: Date,
+    utcOffsetSeconds: number
+): string {
+    return formatLocationTimeRange(start, end, utcOffsetSeconds)
 }
