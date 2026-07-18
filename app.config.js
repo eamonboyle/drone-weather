@@ -32,6 +32,8 @@ module.exports = {
         plugins: [
             'expo-router',
             'expo-font',
+            'expo-web-browser',
+            'expo-status-bar',
             [
                 'expo-splash-screen',
                 {
