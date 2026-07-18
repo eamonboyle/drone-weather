@@ -5,8 +5,6 @@ import {
     useWindowDimensions,
     Pressable,
     LayoutAnimation,
-    Platform,
-    UIManager,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
@@ -29,10 +27,6 @@ import {
     formatWindowTimeRange,
     ForecastFilter,
 } from '@/utils/forecastPlanning'
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true)
-}
 
 export default function ForecastTable() {
     const { locationName } = useLocation()
