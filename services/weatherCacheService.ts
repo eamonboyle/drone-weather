@@ -1,35 +1,35 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { WeatherData } from '@/types/weather'
+import { WeatherData, WeatherLocationMeta } from '@/types/weather'
 
-// Types
-interface CachedWeatherData {
+interface CachedWeatherEntry {
     data: WeatherData
     timestamp: number
     latitude: number
     longitude: number
 }
 
-interface CacheValidationResult {
-    isValid: boolean
-    data?: WeatherData
+interface WeatherCacheStoreV2 {
+    version: 2
+    entries: Record<string, CachedWeatherEntry>
 }
 
-// Constants
+/** Legacy single-slot cache shape */
+interface LegacyCachedWeatherData {
+    data: WeatherData
+    timestamp: number
+    latitude: number
+    longitude: number
+}
+
 const CONFIG = {
-    CACHE_KEY: 'weather_data_cache',
-    CACHE_DURATION: 60 * 60 * 1000, // 60 minutes in milliseconds
-    LOCATION_THRESHOLD: 0.001, // Approximately 100 meters
+    CACHE_KEY_V2: 'weather_data_cache_v2',
+    LEGACY_CACHE_KEY: 'weather_data_cache',
+    CACHE_DURATION: 60 * 60 * 1000,
+    LOCATION_THRESHOLD: 0.001,
 } as const
 
-// Helper Functions
-async function readFromCache(): Promise<CachedWeatherData | null> {
-    try {
-        const cachedData = await AsyncStorage.getItem(CONFIG.CACHE_KEY)
-        return cachedData ? JSON.parse(cachedData) : null
-    } catch (error) {
-        console.error('Error reading from cache:', error)
-        return null
-    }
+function coordKey(latitude: number, longitude: number): string {
+    return `${latitude.toFixed(3)},${longitude.toFixed(3)}`
 }
 
 function isLocationMatch(
@@ -57,64 +57,101 @@ function reviveWeatherData(data: WeatherData): WeatherData {
                     ? hour.time
                     : new Date(hour.time as string | number),
         })),
+        meta: data.meta,
     }
 }
 
-function validateCache(
-    cached: CachedWeatherData | null,
+async function readStore(): Promise<WeatherCacheStoreV2> {
+    try {
+        const raw = await AsyncStorage.getItem(CONFIG.CACHE_KEY_V2)
+        if (!raw) {
+            return { version: 2, entries: {} }
+        }
+        const parsed = JSON.parse(raw) as WeatherCacheStoreV2
+        if (parsed?.version !== 2 || typeof parsed.entries !== 'object') {
+            return { version: 2, entries: {} }
+        }
+        return parsed
+    } catch (error) {
+        console.error('Error reading weather cache store:', error)
+        return { version: 2, entries: {} }
+    }
+}
+
+async function writeStore(store: WeatherCacheStoreV2): Promise<void> {
+    await AsyncStorage.setItem(CONFIG.CACHE_KEY_V2, JSON.stringify(store))
+}
+
+async function readLegacyCache(): Promise<LegacyCachedWeatherData | null> {
+    try {
+        const cachedData = await AsyncStorage.getItem(CONFIG.LEGACY_CACHE_KEY)
+        return cachedData ? JSON.parse(cachedData) : null
+    } catch {
+        return null
+    }
+}
+
+async function removeLegacyCache(): Promise<void> {
+    try {
+        await AsyncStorage.removeItem(CONFIG.LEGACY_CACHE_KEY)
+    } catch {
+        // ignore
+    }
+}
+
+function findEntryForCoords(
+    store: WeatherCacheStoreV2,
     latitude: number,
     longitude: number
-): CacheValidationResult {
-    if (!cached) {
-        return { isValid: false }
+): CachedWeatherEntry | null {
+    const exact = store.entries[coordKey(latitude, longitude)]
+    if (exact && isLocationMatch(exact, { latitude, longitude })) {
+        return exact
     }
 
-    const isExpired = isCacheExpired(cached.timestamp)
-    const locationMatches = isLocationMatch(cached, { latitude, longitude })
-
-    return {
-        isValid: !isExpired && locationMatches,
-        data:
-            !isExpired && locationMatches
-                ? reviveWeatherData(cached.data)
-                : undefined,
+    for (const entry of Object.values(store.entries)) {
+        if (isLocationMatch(entry, { latitude, longitude })) {
+            return entry
+        }
     }
+    return null
 }
 
-// Main Service
 export class WeatherCacheService {
     static async getCachedWeather(
         latitude: number,
         longitude: number
     ): Promise<WeatherData | null> {
         try {
-            const cached = await readFromCache()
-            const { isValid, data } = validateCache(cached, latitude, longitude)
-            return isValid ? data! : null
+            const store = await readStore()
+            const entry = findEntryForCoords(store, latitude, longitude)
+
+            if (entry && !isCacheExpired(entry.timestamp)) {
+                return reviveWeatherData(entry.data)
+            }
+
+            // Migrate legacy single-slot cache when coordinates match
+            const legacy = await readLegacyCache()
+            if (
+                legacy &&
+                !isCacheExpired(legacy.timestamp) &&
+                isLocationMatch(legacy, { latitude, longitude })
+            ) {
+                const revived = reviveWeatherData(legacy.data)
+                // Preserve original TTL — do not extend lifetime via Date.now()
+                await WeatherCacheService.cacheWeather(
+                    revived,
+                    latitude,
+                    longitude,
+                    { timestamp: legacy.timestamp }
+                )
+                await removeLegacyCache()
+                return revived
+            }
+
+            return null
         } catch (error) {
             console.error('Error getting cached weather:', error)
-            return null
-        }
-    }
-
-    static async getLastCachedWeather(): Promise<{
-        data: WeatherData
-        latitude: number
-        longitude: number
-    } | null> {
-        try {
-            const cached = await readFromCache()
-            if (!cached || isCacheExpired(cached.timestamp)) {
-                return null
-            }
-
-            return {
-                data: reviveWeatherData(cached.data),
-                latitude: cached.latitude,
-                longitude: cached.longitude,
-            }
-        } catch (error) {
-            console.error('Error getting last cached weather:', error)
             return null
         }
     }
@@ -122,19 +159,41 @@ export class WeatherCacheService {
     static async cacheWeather(
         data: WeatherData,
         latitude: number,
-        longitude: number
+        longitude: number,
+        options?: { timestamp?: number }
     ): Promise<void> {
         try {
-            const cacheData: CachedWeatherData = {
-                data,
-                timestamp: Date.now(),
+            const store = await readStore()
+            const key = coordKey(latitude, longitude)
+            const meta: WeatherLocationMeta | undefined = data.meta
+                ? {
+                      ...data.meta,
+                      latitude,
+                      longitude,
+                  }
+                : data.meta
+
+            const entry: CachedWeatherEntry = {
+                data: {
+                    ...data,
+                    meta,
+                },
+                timestamp: options?.timestamp ?? Date.now(),
                 latitude,
                 longitude,
             }
-            await AsyncStorage.setItem(
-                CONFIG.CACHE_KEY,
-                JSON.stringify(cacheData)
-            )
+
+            store.entries[key] = entry
+            await writeStore(store)
+            // Only drop legacy when this write covers the same coords (avoid
+            // wiping an unmigrated other-location legacy entry)
+            const legacy = await readLegacyCache()
+            if (
+                legacy &&
+                isLocationMatch(legacy, { latitude, longitude })
+            ) {
+                await removeLegacyCache()
+            }
         } catch (error) {
             console.error('Error caching weather data:', error)
             throw new Error('Failed to cache weather data')
@@ -143,32 +202,77 @@ export class WeatherCacheService {
 
     static async clearCache(): Promise<void> {
         try {
-            await AsyncStorage.removeItem(CONFIG.CACHE_KEY)
+            await AsyncStorage.multiRemove([
+                CONFIG.CACHE_KEY_V2,
+                CONFIG.LEGACY_CACHE_KEY,
+            ])
         } catch (error) {
             console.error('Error clearing weather cache:', error)
             throw new Error('Failed to clear weather cache')
         }
     }
 
-    static async getCacheStatus(): Promise<{
+    static async getCacheStatus(options?: {
+        latitude?: number
+        longitude?: number
+    }): Promise<{
         hasCache: boolean
         isExpired: boolean | null
         timestamp: number | null
+        entryCount: number
+        latitude: number | null
+        longitude: number | null
     }> {
         try {
-            const cached = await readFromCache()
-            if (!cached) {
+            const store = await readStore()
+            const entryCount = Object.keys(store.entries).length
+
+            let entry: CachedWeatherEntry | null = null
+            if (
+                typeof options?.latitude === 'number' &&
+                typeof options?.longitude === 'number'
+            ) {
+                entry = findEntryForCoords(
+                    store,
+                    options.latitude,
+                    options.longitude
+                )
+            } else {
+                const sorted = Object.values(store.entries).sort(
+                    (a, b) => b.timestamp - a.timestamp
+                )
+                entry = sorted[0] ?? null
+            }
+
+            if (!entry) {
+                const legacy = await readLegacyCache()
+                if (!legacy) {
+                    return {
+                        hasCache: false,
+                        isExpired: null,
+                        timestamp: null,
+                        entryCount,
+                        latitude: null,
+                        longitude: null,
+                    }
+                }
                 return {
-                    hasCache: false,
-                    isExpired: null,
-                    timestamp: null,
+                    hasCache: true,
+                    isExpired: isCacheExpired(legacy.timestamp),
+                    timestamp: legacy.timestamp,
+                    entryCount: entryCount || 1,
+                    latitude: legacy.latitude,
+                    longitude: legacy.longitude,
                 }
             }
 
             return {
                 hasCache: true,
-                isExpired: isCacheExpired(cached.timestamp),
-                timestamp: cached.timestamp,
+                isExpired: isCacheExpired(entry.timestamp),
+                timestamp: entry.timestamp,
+                entryCount,
+                latitude: entry.latitude,
+                longitude: entry.longitude,
             }
         } catch (error) {
             console.error('Error getting cache status:', error)

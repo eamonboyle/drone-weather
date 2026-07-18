@@ -5,7 +5,12 @@ import { DroneFlyabilityService } from '@/services/droneFlyabilityService'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
 import { useWeatherData } from '@/contexts/WeatherDataContext'
 import { useLocation } from '@/contexts/LocationContext'
-import { findHourlyDataForClockHour } from '@/utils/weatherHourUtils'
+import {
+    findHourlyDataForClockHour,
+    getNowClockHour,
+    getWeatherUtcOffset,
+} from '@/utils/weatherHourUtils'
+import { msUntilNextLocationHour } from '@/utils/locationTime'
 import { WeatherData } from '@/types/weather'
 import { WeatherThresholds } from '@/types/weatherConfig'
 
@@ -34,13 +39,43 @@ function coordsMatch(
     return coordKey(a.latitude, a.longitude) === coordKey(b.latitude, b.longitude)
 }
 
+function thresholdsFingerprint(thresholds: WeatherThresholds): string {
+    return [
+        thresholds.temperature.unit,
+        thresholds.temperature.min,
+        thresholds.temperature.max,
+        thresholds.windSpeed.unit,
+        thresholds.windSpeed.max,
+        thresholds.windGust.max,
+        thresholds.visibility.unit,
+        thresholds.visibility.min,
+        thresholds.weather.maxPrecipitationProbability,
+    ].join(':')
+}
+
+function resultCacheKey(
+    latitude: number,
+    longitude: number,
+    weatherStamp: number | null,
+    thresholds: WeatherThresholds,
+    clockHour: number
+): string {
+    return [
+        coordKey(latitude, longitude),
+        weatherStamp ?? 'none',
+        clockHour,
+        thresholdsFingerprint(thresholds),
+    ].join('|')
+}
+
 function evaluateFlyability(
     weatherData: WeatherData,
     thresholds: WeatherThresholds
 ): FlyabilityStatus {
     const hourData = findHourlyDataForClockHour(
         weatherData.hourlyData,
-        new Date().getHours()
+        getNowClockHour(weatherData),
+        { utcOffsetSeconds: getWeatherUtcOffset(weatherData) }
     )
     if (!hourData) return 'unavailable'
 
@@ -48,6 +83,9 @@ function evaluateFlyability(
         hourData,
         thresholds
     )
+    if (conditions.checks.some((c) => c.status === 'unavailable')) {
+        return 'unavailable'
+    }
     return conditions.isSuitable ? 'safe' : 'not_flyable'
 }
 
@@ -73,13 +111,15 @@ export function useLocationFlyability(
 ) {
     const { enabled = true } = options
     const { thresholds } = useWeatherConfig()
-    const { weatherData } = useWeatherData()
+    const { weatherData, lastUpdated } = useWeatherData()
     const { location } = useLocation()
     const [statusById, setStatusById] = useState<
         Record<string, FlyabilityStatus>
     >({})
     const resolvedRef = useRef<Map<string, FlyabilityStatus>>(new Map())
     const mountedRef = useRef(true)
+    const generationRef = useRef(0)
+    const [hourTick, setHourTick] = useState(0)
 
     useEffect(() => {
         mountedRef.current = true
@@ -88,28 +128,72 @@ export function useLocationFlyability(
         }
     }, [])
 
-    const processLocation = useCallback(
-        async (item: FlyabilityLocation): Promise<FlyabilityStatus> => {
-            const key = coordKey(item.latitude, item.longitude)
-            const cached = resolvedRef.current.get(key)
-            if (cached && cached !== 'loading') return cached
+    // Invalidate only at the next location-local hour boundary (not every minute)
+    useEffect(() => {
+        let timeoutId: ReturnType<typeof setTimeout> | null = null
+        let cancelled = false
 
+        const schedule = () => {
+            const offset = getWeatherUtcOffset(weatherData)
+            const delay = msUntilNextLocationHour(offset)
+            timeoutId = setTimeout(() => {
+                if (cancelled) return
+                setHourTick((t) => t + 1)
+                schedule()
+            }, delay)
+        }
+
+        schedule()
+        return () => {
+            cancelled = true
+            if (timeoutId) clearTimeout(timeoutId)
+        }
+    }, [weatherData?.meta?.utcOffsetSeconds])
+
+    const processLocation = useCallback(
+        async (
+            item: FlyabilityLocation,
+            generation: number
+        ): Promise<FlyabilityStatus | null> => {
+            if (generation !== generationRef.current) return null
+
+            let data: WeatherData | null = null
             if (
                 location &&
                 weatherData &&
                 coordsMatch(location.coords, item)
             ) {
-                return evaluateFlyability(weatherData, thresholds)
+                data = weatherData
+            } else {
+                data = await fetchWeatherForLocation(
+                    item.latitude,
+                    item.longitude
+                )
             }
 
-            const data = await fetchWeatherForLocation(
-                item.latitude,
-                item.longitude
-            )
+            if (generation !== generationRef.current) return null
             if (!data) return 'unavailable'
-            return evaluateFlyability(data, thresholds)
+
+            const stamp = data.meta?.fetchedAt ?? lastUpdated
+            const clockHour = getNowClockHour(data)
+            const key = resultCacheKey(
+                item.latitude,
+                item.longitude,
+                stamp,
+                thresholds,
+                clockHour
+            )
+
+            const cached = resolvedRef.current.get(key)
+            if (cached) return cached
+
+            const status = evaluateFlyability(data, thresholds)
+            if (generation !== generationRef.current) return null
+
+            resolvedRef.current.set(key, status)
+            return status
         },
-        [location, weatherData, thresholds]
+        [location, weatherData, lastUpdated, thresholds, hourTick]
     )
 
     useEffect(() => {
@@ -120,7 +204,9 @@ export function useLocationFlyability(
             return
         }
 
-        let cancelled = false
+        const generation = ++generationRef.current
+        resolvedRef.current.clear()
+
         const locationIds = new Set(locations.map((item) => item.id))
 
         setStatusById((prev) => {
@@ -136,13 +222,17 @@ export function useLocationFlyability(
             const inFlight: Promise<void>[] = []
 
             const runOne = async (item: FlyabilityLocation) => {
-                if (cancelled) return
+                if (generation !== generationRef.current) return
 
-                const key = coordKey(item.latitude, item.longitude)
-                const status = await processLocation(item)
-                if (cancelled || !locationIds.has(item.id)) return
+                const status = await processLocation(item, generation)
+                if (
+                    status === null ||
+                    generation !== generationRef.current ||
+                    !locationIds.has(item.id)
+                ) {
+                    return
+                }
 
-                resolvedRef.current.set(key, status)
                 if (mountedRef.current) {
                     setStatusById((prev) => ({
                         ...prev,
@@ -151,8 +241,12 @@ export function useLocationFlyability(
                 }
             }
 
-            while (queue.length > 0 && !cancelled) {
-                while (inFlight.length < MAX_CONCURRENT && queue.length > 0) {
+            while (queue.length > 0 && generation === generationRef.current) {
+                while (
+                    inFlight.length < MAX_CONCURRENT &&
+                    queue.length > 0 &&
+                    generation === generationRef.current
+                ) {
                     const item = queue.shift()!
                     const task = runOne(item).finally(() => {
                         const index = inFlight.indexOf(task)
@@ -171,7 +265,7 @@ export function useLocationFlyability(
         void runQueue()
 
         return () => {
-            cancelled = true
+            generationRef.current += 1
         }
     }, [locations, processLocation, enabled])
 
