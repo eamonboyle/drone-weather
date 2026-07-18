@@ -1,0 +1,18 @@
+appId: com.eamonsdiary.droneweather
+---
+- launchApp
+- tapOn: "Settings"
+- assertVisible: "Temperature"
+- assertVisible: "Data & Device"
+- assertVisible: "Cloud cover is shown in forecasts for reference only"
+- assertVisible: "Drone Profile"
+- tapOn: "Select a drone profile"
+- assertVisible: "Select Drone Profile"
+- assertVisible: "Search by name or manufacturer..."
+- tapOn: "Close drone profile selector"
+- assertVisible: "celsius"
+- assertVisible: "fahrenheit"
+- tapOn: "fahrenheit"
+- assertVisible: "fahrenheit"
+- assertVisible: "Clear weather cache"
+- assertVisible: "Reset to Defaults"

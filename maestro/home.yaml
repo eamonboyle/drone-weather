@@ -1,0 +1,9 @@
+appId: com.eamonsdiary.droneweather
+---
+- launchApp
+- assertVisible: "Home"
+- tapOn: "Home"
+- assertVisible: "Select hour for conditions"
+- assertVisible:
+    text: "Safe to Fly|Not Safe to Fly"
+    optional: true

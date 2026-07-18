@@ -1,0 +1,19 @@
+name: Maestro (manual)
+
+# Not run on every PR: requires a device/emulator and a standalone APK.
+# Expo Go cannot be targeted by appId com.eamonsdiary.droneweather.
+on:
+  workflow_dispatch:
+
+jobs:
+  maestro:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Document requirements
+        run: |
+          echo "Install Maestro CLI and a standalone APK with package"
+          echo "com.eamonsdiary.droneweather, then run: maestro test maestro/"
+          echo "See maestro/README.md"
+          cat maestro/README.md

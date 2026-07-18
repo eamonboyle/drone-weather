@@ -1,0 +1,9 @@
+appId: com.eamonsdiary.droneweather
+---
+- launchApp
+- tapOn: "Home"
+- tapOn: "Select Location"
+- assertVisible: "Search launch sites..."
+- assertVisible:
+    text: "Favorites|Recent|Current"
+    optional: true
