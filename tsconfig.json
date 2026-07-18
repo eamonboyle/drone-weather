@@ -11,6 +11,7 @@
         "**/*.ts",
         "**/*.tsx",
         "nativewind-env.d.ts",
+        "css-modules.d.ts",
         "babel.config.js",
         "tailwind.config.js",
         ".expo/types/**/*.ts",
