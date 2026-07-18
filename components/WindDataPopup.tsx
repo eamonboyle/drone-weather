@@ -8,7 +8,7 @@ import {
 
 interface WindDataPoint {
     height: string
-    speed: number
+    speed: number | null
 }
 
 interface WindDataPopupProps {
@@ -31,7 +31,8 @@ export function WindDataPopup({
 }: WindDataPopupProps) {
     const { thresholds } = useWeatherConfig()
 
-    const isSpeedSafe = (speedMph: number) => {
+    const isSpeedSafe = (speedMph: number | null): boolean | 'unavailable' => {
+        if (speedMph === null) return 'unavailable'
         if (!thresholds) return false
         const max =
             type === 'speed'
@@ -44,8 +45,10 @@ export function WindDataPopup({
         )
     }
 
-    const formatSpeed = (speedMph: number) =>
-        formatWindSpeedMph(speedMph, thresholds.windSpeed.unit)
+    const formatSpeed = (speedMph: number | null) =>
+        speedMph === null
+            ? '—'
+            : formatWindSpeedMph(speedMph, thresholds.windSpeed.unit)
 
     return (
         <Modal
@@ -105,15 +108,29 @@ export function WindDataPopup({
                                 </Text>
                                 <MaterialCommunityIcons
                                     name={
-                                        isSpeedSafe(item.speed)
+                                        isSpeedSafe(item.speed) === true
                                             ? 'check-circle'
-                                            : 'close-circle'
+                                            : isSpeedSafe(item.speed) ===
+                                                'unavailable'
+                                              ? 'help-circle'
+                                              : 'close-circle'
                                     }
                                     size={20}
                                     color={
-                                        isSpeedSafe(item.speed)
+                                        isSpeedSafe(item.speed) === true
                                             ? '#10b981'
-                                            : '#ef4444'
+                                            : isSpeedSafe(item.speed) ===
+                                                'unavailable'
+                                              ? '#94a3b8'
+                                              : '#ef4444'
+                                    }
+                                    accessibilityLabel={
+                                        isSpeedSafe(item.speed) === true
+                                            ? 'Safe'
+                                            : isSpeedSafe(item.speed) ===
+                                                'unavailable'
+                                              ? 'Unavailable'
+                                              : 'Unsafe'
                                     }
                                 />
                             </View>

@@ -61,10 +61,17 @@ export const LocationCard = memo(function LocationCard({
         <Pressable
             onPress={handlePress}
             disabled={isSelecting}
+            accessibilityRole="button"
+            accessibilityState={{
+                selected: isActive,
+                disabled: isSelecting,
+            }}
+            accessibilityLabel={`${primary}${secondary ? `, ${secondary}` : ''}${isActive ? ', active location' : ''}${isFavorite ? ', favorite' : ''}`}
             className="mb-3 rounded-2xl border border-white/5 active:bg-white/5 overflow-hidden"
             style={{
                 backgroundColor: 'rgba(22, 26, 32, 0.6)',
                 opacity: isSelecting && !isActiveSelection ? 0.5 : 1,
+                minHeight: 44,
             }}
         >
             <View className="flex-row items-center p-4">
@@ -133,8 +140,16 @@ export const LocationCard = memo(function LocationCard({
                                     event.stopPropagation()
                                     handleToggleFavorite()
                                 }}
+                                accessibilityRole="button"
+                                accessibilityLabel={
+                                    isFavorite
+                                        ? `Remove ${primary} from favorites`
+                                        : `Add ${primary} to favorites`
+                                }
+                                accessibilityState={{ selected: isFavorite }}
                                 className="p-2"
                                 hitSlop={4}
+                                style={{ minHeight: 44, minWidth: 44, justifyContent: 'center' }}
                             >
                                 <MaterialCommunityIcons
                                     name={isFavorite ? 'star' : 'star-outline'}

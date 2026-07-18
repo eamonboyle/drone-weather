@@ -41,6 +41,7 @@ export function LocationSearchBar({
                     returnKeyType="search"
                     autoCorrect={false}
                     autoCapitalize="words"
+                    accessibilityLabel="Search launch sites"
                 />
                 {isSearching ? (
                     <ActivityIndicator size="small" color="#f59e0b" />
@@ -49,6 +50,9 @@ export function LocationSearchBar({
                         onPress={onClear}
                         className="p-1"
                         hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel="Clear location search"
+                        style={{ minHeight: 44, minWidth: 44, justifyContent: 'center' }}
                     >
                         <MaterialCommunityIcons
                             name="close-circle"

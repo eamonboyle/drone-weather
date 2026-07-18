@@ -2,12 +2,14 @@ import React from 'react'
 import { View, Text, Pressable } from 'react-native'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import Slider from '@react-native-community/slider'
+import { Theme } from '@/constants/Theme'
 
 interface SettingsSliderProps {
     icon: keyof typeof MaterialCommunityIcons.glyphMap
     label: string
     value: number
     onValueChange: (value: number) => void
+    onSlidingComplete?: (value: number) => void
     minimumValue: number
     maximumValue: number
     step?: number
@@ -23,6 +25,7 @@ export function SettingsSlider({
     label,
     value,
     onValueChange,
+    onSlidingComplete,
     minimumValue,
     maximumValue,
     step = 1,
@@ -32,40 +35,55 @@ export function SettingsSlider({
     selectedUnit,
     sublabel,
 }: SettingsSliderProps) {
+    const accessibilityValue = `${value}${unit ? ` ${unit}` : ''}`
+
     return (
         <View
             className="rounded-xl p-4 mb-3"
             style={{
-                backgroundColor: 'rgba(22, 26, 32, 0.6)',
+                backgroundColor: Theme.colors.surfaceElevated,
                 borderWidth: 1,
-                borderColor: 'rgba(255, 255, 255, 0.06)',
+                borderColor: Theme.colors.border,
+                opacity: 0.9,
             }}
+            accessible={false}
         >
             <View className="flex-row items-center justify-between mb-2">
                 <View className="flex-row items-center flex-1">
                     <MaterialCommunityIcons
                         name={icon}
                         size={22}
-                        color="#f59e0b"
+                        color={Theme.colors.accent}
                     />
                     <Text
                         className="text-slate-100 text-base font-semibold ml-2"
                         style={{ fontFamily: 'Outfit-SemiBold' }}
+                        accessibilityRole="header"
                     >
                         {label}
                     </Text>
                 </View>
                 {units && onUnitChange && (
-                    <View className="flex-row">
+                    <View
+                        className="flex-row"
+                        accessibilityRole="tablist"
+                    >
                         {units.map((u) => (
                             <Pressable
                                 key={u}
                                 onPress={() => onUnitChange(u)}
-                                className={`px-3 py-1.5 rounded-lg ml-2 ${
-                                    selectedUnit === u
-                                        ? 'bg-amber-500'
-                                        : 'bg-slate-700/50'
-                                }`}
+                                accessibilityRole="tab"
+                                accessibilityState={{ selected: selectedUnit === u }}
+                                accessibilityLabel={`${label} unit ${u}`}
+                                className="px-3 py-1.5 rounded-lg ml-2"
+                                style={{
+                                    minHeight: Theme.touchTarget,
+                                    justifyContent: 'center',
+                                    backgroundColor:
+                                        selectedUnit === u
+                                            ? Theme.colors.accent
+                                            : 'rgba(51, 65, 85, 0.5)',
+                                }}
                             >
                                 <Text
                                     className={`text-sm ${
@@ -103,15 +121,24 @@ export function SettingsSlider({
                         step={step}
                         value={value}
                         onValueChange={onValueChange}
-                        minimumTrackTintColor="#f59e0b"
+                        onSlidingComplete={onSlidingComplete}
+                        minimumTrackTintColor={Theme.colors.accent}
                         maximumTrackTintColor="#334155"
-                        thumbTintColor="#f59e0b"
+                        thumbTintColor={Theme.colors.accent}
+                        accessibilityLabel={label}
+                        accessibilityValue={{
+                            min: minimumValue,
+                            max: maximumValue,
+                            now: value,
+                            text: accessibilityValue,
+                        }}
                     />
                 </View>
                 <View className="ml-3 min-w-[60px]">
                     <Text
                         className="text-slate-100 text-base text-right"
                         style={{ fontFamily: 'DMSans' }}
+                        accessibilityLabel={`Current value ${accessibilityValue}`}
                     >
                         {value}
                         {unit && ` ${unit}`}
