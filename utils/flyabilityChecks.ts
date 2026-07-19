@@ -24,7 +24,7 @@ export function checkStatusToCellSafe(
     status: FlyabilityCheckStatus
 ): boolean | 'neutral' {
     if (status === 'safe') return true
-    if (status === 'unavailable') return false
+    if (status === 'unavailable') return 'neutral'
     return false
 }
 
