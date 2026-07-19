@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react'
-import * as Location from 'expo-location'
-import { reverseGeocodePlaceName } from '@/utils/locationFormatting'
+import { useEffect } from 'react'
+import { useLocation } from '@/contexts/LocationContext'
 
 interface DeviceLocationPreview {
     name: string
@@ -9,82 +8,33 @@ interface DeviceLocationPreview {
 }
 
 /**
- * Resolves the phone's GPS position for display only — does not change the
- * app's active selected location.
+ * Display-only device location from the shared LocationContext GPS state.
+ * Does not request permission, GPS, or reverse geocoding independently.
  */
 export function useDeviceLocationPreview(
     enabled: boolean
 ): DeviceLocationPreview {
-    const [name, setName] = useState('')
-    const [isLoading, setIsLoading] = useState(false)
-    const [permissionDenied, setPermissionDenied] = useState(false)
+    const {
+        deviceLocationName,
+        isDeviceLocating,
+        deviceLocation,
+        ensureDeviceLocation,
+    } = useLocation()
 
     useEffect(() => {
         if (!enabled) return
+        void ensureDeviceLocation()
+    }, [enabled, ensureDeviceLocation])
 
-        let cancelled = false
+    const permissionDenied =
+        enabled &&
+        !isDeviceLocating &&
+        !deviceLocation &&
+        deviceLocationName === 'Location access needed'
 
-        async function loadDeviceLocation() {
-            setIsLoading(true)
-            setPermissionDenied(false)
-
-            try {
-                const { status } =
-                    await Location.requestForegroundPermissionsAsync()
-
-                if (status !== 'granted') {
-                    if (!cancelled) {
-                        setPermissionDenied(true)
-                        setName('Location access needed')
-                    }
-                    return
-                }
-
-                const lastKnown = await Location.getLastKnownPositionAsync({
-                    maxAge: 300_000,
-                })
-
-                if (lastKnown && !cancelled) {
-                    const previewName = await reverseGeocodePlaceName(
-                        lastKnown.coords.latitude,
-                        lastKnown.coords.longitude
-                    )
-                    if (!cancelled) setName(previewName)
-                }
-
-                try {
-                    const current = await Location.getCurrentPositionAsync({
-                        accuracy: Location.Accuracy.Balanced,
-                    })
-
-                    if (cancelled) return
-
-                    const currentName = await reverseGeocodePlaceName(
-                        current.coords.latitude,
-                        current.coords.longitude
-                    )
-                    if (!cancelled) setName(currentName)
-                } catch {
-                    // Emulators often have no GPS fix; keep last-known preview if any.
-                    if (!cancelled && !lastKnown) {
-                        setName('Unable to detect location')
-                    }
-                }
-            } catch {
-                if (!cancelled) {
-                    setName('Unable to detect location')
-                }
-            } finally {
-                if (!cancelled) setIsLoading(false)
-            }
-        }
-
-        void loadDeviceLocation()
-
-        return () => {
-            cancelled = true
-        }
-    }, [enabled])
-
-    return { name, isLoading, permissionDenied }
+    return {
+        name: deviceLocationName,
+        isLoading: enabled && (isDeviceLocating || (!deviceLocationName && !permissionDenied)),
+        permissionDenied,
+    }
 }

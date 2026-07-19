@@ -1,5 +1,5 @@
 import { View, TextInput, Pressable, ActivityIndicator } from 'react-native'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 
 interface LocationSearchBarProps {
     value: string

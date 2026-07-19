@@ -146,4 +146,31 @@ describe('WeatherCacheService isolation', () => {
             await WeatherCacheService.getCachedWeather(53.35, -6.26)
         ).toBeNull()
     })
+
+    it('getCachedWeatherBatch reads AsyncStorage once for many locations', async () => {
+        const getItem = jest.spyOn(AsyncStorage, 'getItem')
+
+        const locations = Array.from({ length: 12 }, (_, i) => ({
+            latitude: 51.5 + i * 0.01,
+            longitude: -0.12 - i * 0.01,
+        }))
+
+        for (const loc of locations) {
+            await WeatherCacheService.cacheWeather(
+                makeWeather(loc.latitude, loc.longitude, `${loc.latitude}`),
+                loc.latitude,
+                loc.longitude
+            )
+        }
+
+        getItem.mockClear()
+
+        const batch = await WeatherCacheService.getCachedWeatherBatch(locations)
+
+        const v2Reads = getItem.mock.calls.filter(
+            ([key]) => key === 'weather_data_cache_v2'
+        )
+        expect(v2Reads).toHaveLength(1)
+        expect(batch.size).toBe(12)
+    })
 })

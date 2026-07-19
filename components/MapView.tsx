@@ -9,7 +9,7 @@ import {
     Platform,
 } from 'react-native'
 import { WebView, WebViewNavigation } from 'react-native-webview'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { useLocation } from '@/contexts/LocationContext'
 import {
     buildEmbedMapUrl,

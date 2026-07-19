@@ -1,26 +1,24 @@
-import FontAwesome from '@expo/vector-icons/FontAwesome'
 import { DarkTheme, ThemeProvider } from 'expo-router/react-navigation'
 import { useFonts } from 'expo-font'
 import { Stack } from 'expo-router'
 import * as SplashScreen from 'expo-splash-screen'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect } from 'react'
+// Required by NativeWind / react-native-css-interop (and Reanimated babel plugin).
 import 'react-native-reanimated'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { enableFreeze } from 'react-native-screens'
 import { LocationProvider } from '@/contexts/LocationContext'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
-import {
-    Outfit_400Regular,
-    Outfit_500Medium,
-    Outfit_600SemiBold,
-    Outfit_700Bold,
-} from '@expo-google-fonts/outfit'
-import {
-    DMSans_400Regular,
-    DMSans_500Medium,
-    DMSans_600SemiBold,
-} from '@expo-google-fonts/dm-sans'
+import { Outfit_400Regular } from '@expo-google-fonts/outfit/400Regular'
+import { Outfit_500Medium } from '@expo-google-fonts/outfit/500Medium'
+import { Outfit_600SemiBold } from '@expo-google-fonts/outfit/600SemiBold'
+import { Outfit_700Bold } from '@expo-google-fonts/outfit/700Bold'
+import { DMSans_400Regular } from '@expo-google-fonts/dm-sans/400Regular'
+import { DMSans_500Medium } from '@expo-google-fonts/dm-sans/500Medium'
+import { DMSans_600SemiBold } from '@expo-google-fonts/dm-sans/600SemiBold'
+import Ionicons from '@expo/vector-icons/Ionicons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 
 import { WeatherConfigProvider } from '@/contexts/WeatherConfigContext'
 import { WeatherDataProvider } from '@/contexts/WeatherDataContext'
@@ -49,7 +47,8 @@ export default function RootLayout() {
         DMSans: DMSans_400Regular,
         'DMSans-Medium': DMSans_500Medium,
         'DMSans-SemiBold': DMSans_600SemiBold,
-        ...FontAwesome.font,
+        ...Ionicons.font,
+        ...MaterialCommunityIcons.font,
     })
 
     // Expo Router uses Error Boundaries to catch errors in the navigation tree.

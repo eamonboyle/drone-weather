@@ -8,7 +8,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { useLocation } from '@/contexts/LocationContext'
 import { useWeatherForLocation } from '@/hooks/useWeatherForLocation'
 import { useLocationSearch } from '@/hooks/useLocationSearch'

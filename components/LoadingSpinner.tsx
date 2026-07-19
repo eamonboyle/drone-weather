@@ -1,6 +1,5 @@
 import React from 'react'
-import { View, ActivityIndicator, StyleSheet } from 'react-native'
-import { ThemedText } from '@/components/ThemedText'
+import { View, ActivityIndicator, StyleSheet, Text } from 'react-native'
 
 interface LoadingSpinnerProps {
     size?: 'small' | 'large'
@@ -20,15 +19,9 @@ export function LoadingSpinner({
     return (
         <View style={containerStyle}>
             <ActivityIndicator size={size} color={color} />
-            {text && (
-                <ThemedText
-                    style={styles.text}
-                    lightColor={color}
-                    darkColor={color}
-                >
-                    {text}
-                </ThemedText>
-            )}
+            {text ? (
+                <Text style={[styles.text, { color }]}>{text}</Text>
+            ) : null}
         </View>
     )
 }
@@ -46,10 +39,11 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)', // Semi-transparent background
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
     },
     text: {
         fontSize: 16,
         fontWeight: '500',
+        fontFamily: 'DMSans-Medium',
     },
 })

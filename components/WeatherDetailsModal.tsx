@@ -8,7 +8,7 @@ import {
     Platform,
     StyleSheet,
 } from 'react-native'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { HourlyWeatherData } from '@/types/weather'
 import {
     formatLocationFullDate,
@@ -186,7 +186,8 @@ export function WeatherDetailsModal({
 }: WeatherDetailsModalProps) {
     const { thresholds } = useWeatherConfig()
 
-    if (!hourData) return null
+    // Skip flyability work while hidden (modal must not recalculate in background).
+    if (!isVisible || !hourData) return null
 
     const flyabilityData = DroneFlyabilityService.checkFlyingConditions(
         hourData,

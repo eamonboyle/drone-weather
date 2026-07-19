@@ -1,0 +1,26 @@
+appId: com.eamonsdiary.droneweather
+---
+- launchApp
+- tapOn: "Home"
+- tapOn: "Map"
+- assertVisible: "Map"
+- tapOn: "Forecast"
+- assertVisible: "Forecast"
+- assertVisible: "Cards"
+- assertVisible: "Table"
+- scroll
+- tapOn: "Table"
+- tapOn: "Cards"
+- tapOn: "Table"
+- tapOn: "Cards"
+- tapOn: "Table"
+- tapOn: "Cards"
+- tapOn: "Flyable"
+- tapOn: "Blocked"
+- tapOn: "All"
+- tapOn: "Home"
+- tapOn: "Select Location"
+- assertVisible: "Locations"
+- back
+- tapOn: "Settings"
+- assertVisible: "Settings"

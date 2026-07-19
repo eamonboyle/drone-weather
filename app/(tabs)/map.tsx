@@ -6,7 +6,7 @@ import { LocationBar } from '@/components/LocationBar'
 import { useLocation } from '@/contexts/LocationContext'
 import { useWeatherForLocation } from '@/hooks/useWeatherForLocation'
 import { Theme } from '@/constants/Theme'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 
 export default function MapScreen() {
     const { locationName, errorMsg } = useLocation()

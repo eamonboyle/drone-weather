@@ -2,62 +2,51 @@ import {
     View,
     Text,
     FlatList,
-    ScrollView,
     useWindowDimensions,
     Pressable,
-    LayoutAnimation,
     RefreshControl,
-    AccessibilityInfo,
+    Platform,
     PixelRatio,
+    ListRenderItem,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
-import { isBefore, startOfHour } from 'date-fns'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
 import { LocationBar } from '@/components/LocationBar'
 import { WeatherDetailsModal } from '@/components/WeatherDetailsModal'
 import { useLocation } from '@/contexts/LocationContext'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
-import { useState, useMemo, useEffect, useCallback } from 'react'
-import { DroneFlyabilityService } from '@/services/droneFlyabilityService'
+import { memo, useState, useMemo, useCallback } from 'react'
 import {
     HourlyWeatherData,
     WEATHER_SOURCE_OPEN_METEO,
 } from '@/types/weather'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useWeatherForLocation } from '@/hooks/useWeatherForLocation'
+import { useFocusAwareFreshnessLabel } from '@/hooks/useFocusAwareFreshnessLabel'
 import {
-    formatPercentDisplay,
-    formatTemperatureDisplay,
-    formatWindDisplay,
-} from '@/utils/weatherDisplay'
-import {
-    buildForecastPlanningSummary,
-    filterHoursByFlyability,
     formatDayLabel,
     formatWindowTimeRange,
     ForecastFilter,
 } from '@/utils/forecastPlanning'
 import {
-    checkStatusToCellSafe,
-    getCheckStatus,
-} from '@/utils/flyabilityChecks'
+    buildForecastViewModel,
+    filterForecastDays,
+    ForecastDayViewModel,
+    ForecastHourViewModel,
+    ForecastViewModel,
+} from '@/utils/forecastViewModel'
 import {
     formatDayKey,
-    formatLocationTime,
     getLocationDayKey,
     isLocationTodayDayKey,
 } from '@/utils/locationTime'
-import { getWeatherUtcOffset } from '@/utils/weatherHourUtils'
 import { Theme } from '@/constants/Theme'
 import { SegmentChips } from '@/components/ui/SegmentChips'
 import { DataFreshnessBanner } from '@/components/ui/DataFreshnessBanner'
 import { EmptyState } from '@/components/ui/StatusBanner'
 
-function maybeAnimate(reduceMotion: boolean) {
-    if (reduceMotion) return
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
-}
+const ANDROID_CLIP = Platform.OS === 'android'
 
 export default function ForecastTable() {
     const { locationName, errorMsg } = useLocation()
@@ -75,8 +64,10 @@ export default function ForecastTable() {
     const condensed = fontScale > 1.15 || PixelRatio.getFontScale() > 1.15
     const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
     const [refreshing, setRefreshing] = useState(false)
-    const [reduceMotion, setReduceMotion] = useState(false)
-    const [expandedDay, setExpandedDay] = useState<string | null>(null)
+    // undefined = default to today once view model is ready; null = user collapsed all
+    const [expandedDay, setExpandedDay] = useState<string | null | undefined>(
+        undefined
+    )
     const [flyabilityFilter, setFlyabilityFilter] =
         useState<ForecastFilter>('all')
     const [selectedHour, setSelectedHour] = useState<HourlyWeatherData | null>(
@@ -84,80 +75,33 @@ export default function ForecastTable() {
     )
     const [isModalVisible, setIsModalVisible] = useState(false)
 
-    useEffect(() => {
-        void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion)
-        const sub = AccessibilityInfo.addEventListener(
-            'reduceMotionChanged',
-            setReduceMotion
-        )
-        return () => sub.remove()
-    }, [])
-
-    const handleHourPress = (hour: HourlyWeatherData) => {
+    const handleHourPress = useCallback((hour: HourlyWeatherData) => {
         setSelectedHour(hour)
         setIsModalVisible(true)
-    }
+    }, [])
 
-    const utcOffsetSeconds = getWeatherUtcOffset(weatherData)
+    const closeModal = useCallback(() => {
+        setIsModalVisible(false)
+    }, [])
 
-    useEffect(() => {
-        if (!weatherData) return
-        setExpandedDay((prev) => {
-            if (prev) return prev
-            return getLocationDayKey(new Date(), utcOffsetSeconds)
-        })
-    }, [weatherData, utcOffsetSeconds])
+    const viewModel = useMemo((): ForecastViewModel | null => {
+        if (!weatherData) return null
+        return buildForecastViewModel(weatherData, thresholds)
+    }, [weatherData, thresholds])
 
-    const filteredDays = useMemo(() => {
-        if (!weatherData) return [] as [string, HourlyWeatherData[]][]
-
-        const groupedByDay = weatherData.hourlyData.reduce(
-            (acc, hour) => {
-                if (isBefore(hour.time, startOfHour(new Date()))) return acc
-                const date = getLocationDayKey(hour.time, utcOffsetSeconds)
-                if (!acc[date]) acc[date] = []
-                acc[date].push(hour)
-                return acc
-            },
-            {} as Record<string, HourlyWeatherData[]>
-        )
-
-        return Object.entries(groupedByDay).filter(
-            ([, hours]) => hours.length > 0
-        )
-    }, [weatherData, utcOffsetSeconds])
-
-    const planningSummary = useMemo(
-        () =>
-            weatherData
-                ? buildForecastPlanningSummary(
-                      weatherData.hourlyData,
-                      filteredDays,
-                      thresholds
-                  )
-                : {
-                      nextWindow: { type: 'none' as const },
-                      bestDay: null,
-                  },
-        [weatherData, filteredDays, thresholds]
-    )
+    const utcOffsetSeconds = viewModel?.utcOffsetSeconds ?? 0
+    const defaultExpandedDay = viewModel
+        ? getLocationDayKey(new Date(), utcOffsetSeconds)
+        : null
+    const activeExpandedDay =
+        expandedDay === undefined ? defaultExpandedDay : expandedDay
 
     const displayDays = useMemo(
         () =>
-            filteredDays
-                .map(
-                    ([date, hours]) =>
-                        [
-                            date,
-                            filterHoursByFlyability(
-                                hours,
-                                thresholds,
-                                flyabilityFilter
-                            ),
-                        ] as [string, HourlyWeatherData[]]
-                )
-                .filter(([, hours]) => hours.length > 0),
-        [filteredDays, thresholds, flyabilityFilter]
+            viewModel
+                ? filterForecastDays(viewModel.days, flyabilityFilter)
+                : [],
+        [viewModel, flyabilityFilter]
     )
 
     const onRefresh = useCallback(async () => {
@@ -169,17 +113,53 @@ export default function ForecastTable() {
         }
     }, [refetch])
 
-    const formatWind = (s: number | null) =>
-        formatWindDisplay(s, thresholds.windSpeed.unit).replace(
-            /\s*(mph|km\/h)$/,
-            ''
-        )
+    const handleFilterChange = useCallback((id: ForecastFilter) => {
+        setFlyabilityFilter(id)
+    }, [])
 
-    const formatTemp = (t: number | null) =>
-        formatTemperatureDisplay(t, thresholds.temperature.unit).replace(
-            /°[CF]$/,
-            ''
-        )
+    const handleViewModeChange = useCallback((mode: 'cards' | 'table') => {
+        setViewMode(mode)
+    }, [])
+
+    const toggleDay = useCallback(
+        (date: string) => {
+            setExpandedDay((prev) => {
+                const current =
+                    prev === undefined ? defaultExpandedDay : prev
+                return current === date ? null : date
+            })
+        },
+        [defaultExpandedDay]
+    )
+
+    const dayKeyExtractor = useCallback(
+        (item: ForecastDayViewModel) => item.date,
+        []
+    )
+
+    const renderDayCard = useCallback<ListRenderItem<ForecastDayViewModel>>(
+        ({ item }) => (
+            <DayCardStrip
+                day={item}
+                isExpanded={activeExpandedDay === item.date}
+                onToggle={toggleDay}
+                onHourPress={handleHourPress}
+                utcOffsetSeconds={utcOffsetSeconds}
+                condensed={condensed}
+            />
+        ),
+        [
+            activeExpandedDay,
+            toggleDay,
+            handleHourPress,
+            utcOffsetSeconds,
+            condensed,
+        ]
+    )
+
+    const freshnessTimestamp =
+        lastUpdated ?? weatherData?.meta?.fetchedAt ?? null
+    const ageLabel = useFocusAwareFreshnessLabel(freshnessTimestamp)
 
     if (isBootstrapping) {
         return (
@@ -193,9 +173,8 @@ export default function ForecastTable() {
         )
     }
 
-    if (!weatherData) {
-        const message =
-            error ?? errorMsg ?? 'No weather data available'
+    if (!weatherData || !viewModel) {
+        const message = error ?? errorMsg ?? 'No weather data available'
         return (
             <SafeAreaView className="flex-1 bg-background">
                 <LocationBar locationName={locationName} />
@@ -209,14 +188,6 @@ export default function ForecastTable() {
         )
     }
 
-    const ageLabel = (() => {
-        const ts = lastUpdated ?? weatherData.meta?.fetchedAt
-        if (!ts) return null
-        const ageMin = Math.max(0, Math.round((Date.now() - ts) / 60_000))
-        if (ageMin < 1) return 'Updated just now'
-        return `Updated ${ageMin} min ago`
-    })()
-
     const sourceLabel =
         weatherData.meta?.source ?? WEATHER_SOURCE_OPEN_METEO
 
@@ -225,7 +196,7 @@ export default function ForecastTable() {
             <LocationBar locationName={locationName} />
 
             <ForecastPlanningSummary
-                summary={planningSummary}
+                summary={viewModel.planningSummary}
                 utcOffsetSeconds={utcOffsetSeconds}
             />
 
@@ -278,10 +249,7 @@ export default function ForecastTable() {
                         { id: 'blocked', label: 'Blocked' },
                     ]}
                     value={flyabilityFilter}
-                    onChange={(id) => {
-                        maybeAnimate(reduceMotion)
-                        setFlyabilityFilter(id)
-                    }}
+                    onChange={handleFilterChange}
                     condensed={condensed}
                 />
             </View>
@@ -293,10 +261,7 @@ export default function ForecastTable() {
                         { id: 'table', label: 'Table' },
                     ]}
                     value={viewMode}
-                    onChange={(mode) => {
-                        maybeAnimate(reduceMotion)
-                        setViewMode(mode)
-                    }}
+                    onChange={handleViewModeChange}
                     accessibilityLabelPrefix="View"
                     condensed={condensed}
                 />
@@ -316,10 +281,14 @@ export default function ForecastTable() {
             ) : viewMode === 'cards' ? (
                 <FlatList
                     data={displayDays}
-                    keyExtractor={([date]) => date}
+                    keyExtractor={dayKeyExtractor}
                     className="flex-1"
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={{ paddingBottom: 32 }}
+                    initialNumToRender={4}
+                    maxToRenderPerBatch={3}
+                    windowSize={5}
+                    removeClippedSubviews={ANDROID_CLIP}
                     refreshControl={
                         <RefreshControl
                             refreshing={refreshing}
@@ -328,33 +297,12 @@ export default function ForecastTable() {
                             colors={[Theme.colors.accent]}
                         />
                     }
-                    renderItem={({ item: [date, hours] }) => (
-                        <DayCardStrip
-                            date={date}
-                            hours={hours}
-                            thresholds={thresholds}
-                            isExpanded={expandedDay === date}
-                            onToggle={() => {
-                                maybeAnimate(reduceMotion)
-                                setExpandedDay((prev) =>
-                                    prev === date ? null : date
-                                )
-                            }}
-                            formatWind={formatWind}
-                            formatTemp={formatTemp}
-                            onHourPress={handleHourPress}
-                            utcOffsetSeconds={utcOffsetSeconds}
-                            condensed={condensed}
-                        />
-                    )}
+                    renderItem={renderDayCard}
                 />
             ) : (
                 <TableView
-                    filteredDays={displayDays}
-                    thresholds={thresholds}
+                    days={displayDays}
                     screenWidth={screenWidth}
-                    formatWind={formatWind}
-                    formatTemp={formatTemp}
                     utcOffsetSeconds={utcOffsetSeconds}
                     onHourPress={handleHourPress}
                     condensed={condensed}
@@ -365,7 +313,7 @@ export default function ForecastTable() {
 
             <WeatherDetailsModal
                 isVisible={isModalVisible}
-                onClose={() => setIsModalVisible(false)}
+                onClose={closeModal}
                 hourData={selectedHour}
                 utcOffsetSeconds={utcOffsetSeconds}
             />
@@ -374,11 +322,11 @@ export default function ForecastTable() {
 }
 
 interface ForecastPlanningSummaryProps {
-    summary: ReturnType<typeof buildForecastPlanningSummary>
+    summary: ForecastViewModel['planningSummary']
     utcOffsetSeconds: number
 }
 
-function ForecastPlanningSummary({
+const ForecastPlanningSummary = memo(function ForecastPlanningSummary({
     summary,
     utcOffsetSeconds,
 }: ForecastPlanningSummaryProps) {
@@ -439,39 +387,180 @@ function ForecastPlanningSummary({
             </View>
         </View>
     )
-}
+})
 
 interface DayCardStripProps {
-    date: string
-    hours: HourlyWeatherData[]
-    thresholds: ReturnType<typeof useWeatherConfig>['thresholds']
+    day: ForecastDayViewModel
     isExpanded: boolean
-    onToggle: () => void
-    formatWind: (s: number | null) => string
-    formatTemp: (t: number | null) => string
+    onToggle: (date: string) => void
     onHourPress: (hour: HourlyWeatherData) => void
     utcOffsetSeconds: number
     condensed: boolean
 }
 
-function DayCardStrip({
-    date,
-    hours,
-    thresholds,
+const HourChip = memo(function HourChip({
+    hourVm,
+    onHourPress,
+    condensed,
+}: {
+    hourVm: ForecastHourViewModel
+    onHourPress: (hour: HourlyWeatherData) => void
+    condensed: boolean
+}) {
+    const colors = hourVm.isSuitable
+        ? (['#065f46', '#047857'] as const)
+        : (['#991b1b', '#b91c1c'] as const)
+
+    return (
+        <Pressable
+            onPress={() => onHourPress(hourVm.hour)}
+            accessibilityRole="button"
+            accessibilityLabel={`Hour ${hourVm.timeLabel}, ${hourVm.isSuitable ? 'safe' : 'unsafe'}`}
+            style={{ minHeight: Theme.touchTarget }}
+        >
+            <LinearGradient
+                colors={colors}
+                className="rounded-lg px-3 py-2 mr-2"
+                style={{
+                    minWidth: condensed ? 52 : 56,
+                    borderWidth: 1,
+                    borderColor: 'rgba(255,255,255,0.08)',
+                }}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+            >
+                <Text
+                    className="text-white/90 text-xs"
+                    style={{ fontFamily: 'DMSans' }}
+                >
+                    {hourVm.timeLabel}
+                </Text>
+                <Text
+                    className="text-white font-bold text-sm"
+                    style={{ fontFamily: 'Outfit-SemiBold' }}
+                >
+                    {hourVm.tempDisplay}°
+                </Text>
+                <Text
+                    className="text-white/80 text-[10px] mt-0.5"
+                    style={{ fontFamily: 'DMSans' }}
+                >
+                    {hourVm.isSuitable ? 'Safe' : 'Unsafe'}
+                </Text>
+            </LinearGradient>
+        </Pressable>
+    )
+})
+
+const ExpandedHourRow = memo(function ExpandedHourRow({
+    hourVm,
+    index,
+    onHourPress,
+    condensed,
+}: {
+    hourVm: ForecastHourViewModel
+    index: number
+    onHourPress: (hour: HourlyWeatherData) => void
+    condensed: boolean
+}) {
+    const timeFontSize = condensed ? 12 : 15
+    const tempFontSize = condensed ? 16 : 18
+    const borderColor = hourVm.isSuitable
+        ? Theme.colors.safe
+        : Theme.colors.danger
+
+    return (
+        <Pressable
+            onPress={() => onHourPress(hourVm.hour)}
+            accessibilityRole="button"
+            accessibilityLabel={`Hour ${hourVm.timeLabel}, ${hourVm.isSuitable ? 'safe to fly' : 'not safe to fly'}`}
+            className="flex-row items-center px-4 py-3.5"
+            style={{
+                minHeight: Theme.touchTarget,
+                backgroundColor:
+                    index % 2 === 1
+                        ? 'rgba(255, 255, 255, 0.02)'
+                        : 'transparent',
+                borderLeftWidth: 4,
+                borderLeftColor: borderColor,
+            }}
+        >
+            <Text
+                className="text-slate-400 w-14"
+                style={{ fontFamily: 'DMSans', fontSize: timeFontSize }}
+            >
+                {hourVm.timeLabel}
+            </Text>
+            <Text
+                className="text-slate-100 flex-1 text-center"
+                style={{
+                    fontFamily: 'Outfit-SemiBold',
+                    fontSize: tempFontSize,
+                }}
+            >
+                {hourVm.tempDisplay}°
+            </Text>
+            <Text
+                className="text-xs mr-2 w-12 text-right"
+                style={{
+                    fontFamily: 'Outfit-SemiBold',
+                    color: hourVm.isSuitable
+                        ? Theme.colors.safe
+                        : Theme.colors.danger,
+                }}
+            >
+                {hourVm.isSuitable ? 'Safe' : 'Unsafe'}
+            </Text>
+            <View className="flex-row items-center w-24 justify-end">
+                <MaterialCommunityIcons
+                    name="weather-windy"
+                    size={14}
+                    color={Theme.colors.textMuted}
+                />
+                <Text
+                    className="text-slate-400 ml-1"
+                    style={{
+                        fontFamily: 'DMSans',
+                        fontSize: condensed ? 12 : 14,
+                    }}
+                >
+                    {hourVm.windDisplay} / {hourVm.gustDisplay}
+                </Text>
+            </View>
+        </Pressable>
+    )
+})
+
+const DayCardStrip = memo(function DayCardStrip({
+    day,
     isExpanded,
     onToggle,
-    formatWind,
-    formatTemp,
     onHourPress,
     utcOffsetSeconds,
     condensed,
 }: DayCardStripProps) {
+    const { date, hours, safeCount, totalHours } = day
     const isToday = isLocationTodayDayKey(date, utcOffsetSeconds)
-    const safeCount = hours.filter((h) =>
-        DroneFlyabilityService.checkFlyingConditions(h, thresholds).isSuitable
-    ).length
-    const timeFontSize = condensed ? 12 : 15
-    const tempFontSize = condensed ? 16 : 18
+
+    const handleToggle = useCallback(() => {
+        onToggle(date)
+    }, [onToggle, date])
+
+    const hourKeyExtractor = useCallback(
+        (item: ForecastHourViewModel) => String(item.key),
+        []
+    )
+
+    const renderHourChip = useCallback<ListRenderItem<ForecastHourViewModel>>(
+        ({ item }) => (
+            <HourChip
+                hourVm={item}
+                onHourPress={onHourPress}
+                condensed={condensed}
+            />
+        ),
+        [onHourPress, condensed]
+    )
 
     return (
         <View
@@ -486,10 +575,10 @@ function DayCardStrip({
             }}
         >
             <Pressable
-                onPress={onToggle}
+                onPress={handleToggle}
                 accessibilityRole="button"
                 accessibilityState={{ expanded: isExpanded }}
-                accessibilityLabel={`${formatDayKey(date, 'full')}, ${safeCount} of ${hours.length} flyable hours, ${isExpanded ? 'expanded' : 'collapsed'}`}
+                accessibilityLabel={`${formatDayKey(date, 'full')}, ${safeCount} of ${totalHours} flyable hours, ${isExpanded ? 'expanded' : 'collapsed'}`}
                 className="flex-row items-center justify-between px-4 py-3"
                 style={{
                     minHeight: Theme.touchTarget,
@@ -512,7 +601,7 @@ function DayCardStrip({
                         style={{ fontFamily: 'DMSans' }}
                     >
                         {formatDayKey(date, 'monthDay')} · {safeCount}/
-                        {hours.length} flyable
+                        {totalHours} flyable
                     </Text>
                 </View>
                 <View className="flex-row items-center gap-2">
@@ -550,270 +639,61 @@ function DayCardStrip({
             </Pressable>
 
             {!isExpanded ? (
-                <ScrollView
+                <FlatList
                     horizontal
+                    data={hours}
+                    keyExtractor={hourKeyExtractor}
+                    renderItem={renderHourChip}
                     showsHorizontalScrollIndicator={false}
                     className="py-3 px-3"
                     contentContainerStyle={{ paddingRight: 16 }}
-                >
-                    {hours.map((hour, i) => {
-                        const cond =
-                            DroneFlyabilityService.checkFlyingConditions(
-                                hour,
-                                thresholds
-                            )
-                        const colors = cond.isSuitable
-                            ? (['#065f46', '#047857'] as const)
-                            : (['#991b1b', '#b91c1c'] as const)
-                        const timeLabel = formatLocationTime(
-                            hour.time,
-                            utcOffsetSeconds
-                        )
-                        return (
-                            <Pressable
-                                key={i}
-                                onPress={() => onHourPress(hour)}
-                                accessibilityRole="button"
-                                accessibilityLabel={`Hour ${timeLabel}, ${cond.isSuitable ? 'safe' : 'unsafe'}`}
-                                style={{ minHeight: Theme.touchTarget }}
-                            >
-                                <LinearGradient
-                                    colors={colors}
-                                    className="rounded-lg px-3 py-2 mr-2"
-                                    style={{
-                                        minWidth: condensed ? 52 : 56,
-                                        borderWidth: 1,
-                                        borderColor: 'rgba(255,255,255,0.08)',
-                                    }}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 1 }}
-                                >
-                                    <Text
-                                        className="text-white/90 text-xs"
-                                        style={{ fontFamily: 'DMSans' }}
-                                    >
-                                        {timeLabel}
-                                    </Text>
-                                    <Text
-                                        className="text-white font-bold text-sm"
-                                        style={{
-                                            fontFamily: 'Outfit-SemiBold',
-                                        }}
-                                    >
-                                        {formatTemp(hour.temperature2m)}°
-                                    </Text>
-                                    <Text
-                                        className="text-white/80 text-[10px] mt-0.5"
-                                        style={{ fontFamily: 'DMSans' }}
-                                    >
-                                        {cond.isSuitable ? 'Safe' : 'Unsafe'}
-                                    </Text>
-                                </LinearGradient>
-                            </Pressable>
-                        )
-                    })}
-                </ScrollView>
+                    initialNumToRender={8}
+                    maxToRenderPerBatch={8}
+                    windowSize={3}
+                    removeClippedSubviews={ANDROID_CLIP}
+                />
             ) : (
                 <View className="py-1">
-                    {hours.map((hour, i) => {
-                        const cond =
-                            DroneFlyabilityService.checkFlyingConditions(
-                                hour,
-                                thresholds
-                            )
-                        const borderColor = cond.isSuitable
-                            ? Theme.colors.safe
-                            : Theme.colors.danger
-                        const timeLabel = formatLocationTime(
-                            hour.time,
-                            utcOffsetSeconds
-                        )
-                        return (
-                            <Pressable
-                                key={i}
-                                onPress={() => onHourPress(hour)}
-                                accessibilityRole="button"
-                                accessibilityLabel={`Hour ${timeLabel}, ${cond.isSuitable ? 'safe to fly' : 'not safe to fly'}`}
-                                className="flex-row items-center px-4 py-3.5"
-                                style={{
-                                    minHeight: Theme.touchTarget,
-                                    backgroundColor:
-                                        i % 2 === 1
-                                            ? 'rgba(255, 255, 255, 0.02)'
-                                            : 'transparent',
-                                    borderLeftWidth: 4,
-                                    borderLeftColor: borderColor,
-                                }}
-                            >
-                                <Text
-                                    className="text-slate-400 w-14"
-                                    style={{
-                                        fontFamily: 'DMSans',
-                                        fontSize: timeFontSize,
-                                    }}
-                                >
-                                    {timeLabel}
-                                </Text>
-                                <Text
-                                    className="text-slate-100 flex-1 text-center"
-                                    style={{
-                                        fontFamily: 'Outfit-SemiBold',
-                                        fontSize: tempFontSize,
-                                    }}
-                                >
-                                    {formatTemp(hour.temperature2m)}°
-                                </Text>
-                                <Text
-                                    className="text-xs mr-2 w-12 text-right"
-                                    style={{
-                                        fontFamily: 'Outfit-SemiBold',
-                                        color: cond.isSuitable
-                                            ? Theme.colors.safe
-                                            : Theme.colors.danger,
-                                    }}
-                                >
-                                    {cond.isSuitable ? 'Safe' : 'Unsafe'}
-                                </Text>
-                                <View className="flex-row items-center w-24 justify-end">
-                                    <MaterialCommunityIcons
-                                        name="weather-windy"
-                                        size={14}
-                                        color={Theme.colors.textMuted}
-                                    />
-                                    <Text
-                                        className="text-slate-400 ml-1"
-                                        style={{
-                                            fontFamily: 'DMSans',
-                                            fontSize: condensed ? 12 : 14,
-                                        }}
-                                    >
-                                        {formatWind(hour.windSpeed10m)} /{' '}
-                                        {formatWind(hour.windGusts10m)}
-                                    </Text>
-                                </View>
-                            </Pressable>
-                        )
-                    })}
+                    {hours.map((hourVm, i) => (
+                        <ExpandedHourRow
+                            key={hourVm.key}
+                            hourVm={hourVm}
+                            index={i}
+                            onHourPress={onHourPress}
+                            condensed={condensed}
+                        />
+                    ))}
                 </View>
             )}
         </View>
     )
-}
+})
 
-function TableView({
-    filteredDays,
-    thresholds,
-    screenWidth,
-    formatWind,
-    formatTemp,
-    onHourPress,
-    utcOffsetSeconds,
-    condensed,
-    refreshing,
-    onRefresh,
+type TableRow =
+    | {
+          kind: 'day'
+          date: string
+          safeCount: number
+          total: number
+          key: string
+      }
+    | {
+          kind: 'hour'
+          hourVm: ForecastHourViewModel
+          date: string
+          key: string
+      }
+
+function TableHeader({
+    label,
+    icon,
+    width,
 }: {
-    filteredDays: [string, HourlyWeatherData[]][]
-    thresholds: ReturnType<typeof useWeatherConfig>['thresholds']
-    screenWidth: number
-    formatWind: (s: number | null) => string
-    formatTemp: (t: number | null) => string
-    onHourPress: (hour: HourlyWeatherData) => void
-    utcOffsetSeconds: number
-    condensed: boolean
-    refreshing: boolean
-    onRefresh: () => void
+    label: string
+    icon: keyof typeof MaterialCommunityIcons.glyphMap
+    width: number
 }) {
-    const timeWidth = condensed ? 64 : 80
-    const cellWidth = (screenWidth - timeWidth) / 5
-
-    type TableRow =
-        | { kind: 'day'; date: string; safeCount: number; total: number }
-        | { kind: 'hour'; hour: HourlyWeatherData; date: string }
-
-    const rows = useMemo(() => {
-        const result: TableRow[] = []
-        for (const [date, hours] of filteredDays) {
-            const safeCount = hours.filter((h) =>
-                DroneFlyabilityService.checkFlyingConditions(h, thresholds)
-                    .isSuitable
-            ).length
-            result.push({
-                kind: 'day',
-                date,
-                safeCount,
-                total: hours.length,
-            })
-            for (const hour of hours) {
-                result.push({ kind: 'hour', hour, date })
-            }
-        }
-        return result
-    }, [filteredDays, thresholds])
-
-    const TableCell = ({
-        value,
-        isSafe = true,
-        icon,
-        width = 60,
-        statusLabel,
-    }: {
-        value?: string | number
-        isSafe?: boolean | 'warning' | 'neutral'
-        icon?: keyof typeof MaterialCommunityIcons.glyphMap
-        width?: number
-        statusLabel?: string
-    }) => {
-        const bg =
-            isSafe === 'neutral'
-                ? Theme.colors.weatherNeutralSurface
-                : isSafe === 'warning'
-                  ? 'rgba(120, 53, 15, 0.5)'
-                  : isSafe
-                    ? 'rgba(6, 95, 70, 0.5)'
-                    : 'rgba(127, 29, 29, 0.5)'
-        const a11yLabel = statusLabel
-            ? `${value ?? ''}, ${statusLabel}`
-            : String(value ?? '')
-        return (
-            <View
-                className="p-2 justify-center items-center border-r border-b border-white/5"
-                style={{
-                    width,
-                    backgroundColor: bg,
-                    minHeight: Theme.touchTarget,
-                }}
-                accessibilityLabel={a11yLabel}
-            >
-                {icon ? (
-                    <MaterialCommunityIcons
-                        name={icon}
-                        size={18}
-                        color={Theme.colors.text}
-                    />
-                ) : (
-                    <Text
-                        className="text-slate-100 text-center text-sm"
-                        style={{
-                            fontFamily: 'DMSans',
-                            fontSize: condensed ? 11 : 14,
-                        }}
-                    >
-                        {value}
-                    </Text>
-                )}
-            </View>
-        )
-    }
-
-    const TableHeader = ({
-        label,
-        icon,
-        width,
-    }: {
-        label: string
-        icon: keyof typeof MaterialCommunityIcons.glyphMap
-        width: number
-    }) => (
+    return (
         <View
             className="p-2 justify-center items-center border-r border-b border-white/5"
             style={{
@@ -833,6 +713,231 @@ function TableView({
                 {label}
             </Text>
         </View>
+    )
+}
+
+const TableCell = memo(function TableCell({
+    value,
+    isSafe = true,
+    icon,
+    width = 60,
+    statusLabel,
+    condensed,
+}: {
+    value?: string | number
+    isSafe?: boolean | 'warning' | 'neutral'
+    icon?: keyof typeof MaterialCommunityIcons.glyphMap
+    width?: number
+    statusLabel?: string
+    condensed: boolean
+}) {
+    const bg =
+        isSafe === 'neutral'
+            ? Theme.colors.weatherNeutralSurface
+            : isSafe === 'warning'
+              ? 'rgba(120, 53, 15, 0.5)'
+              : isSafe
+                ? 'rgba(6, 95, 70, 0.5)'
+                : 'rgba(127, 29, 29, 0.5)'
+    const a11yLabel = statusLabel
+        ? `${value ?? ''}, ${statusLabel}`
+        : String(value ?? '')
+    return (
+        <View
+            className="p-2 justify-center items-center border-r border-b border-white/5"
+            style={{
+                width,
+                backgroundColor: bg,
+                minHeight: Theme.touchTarget,
+            }}
+            accessibilityLabel={a11yLabel}
+        >
+            {icon ? (
+                <MaterialCommunityIcons
+                    name={icon}
+                    size={18}
+                    color={Theme.colors.text}
+                />
+            ) : (
+                <Text
+                    className="text-slate-100 text-center text-sm"
+                    style={{
+                        fontFamily: 'DMSans',
+                        fontSize: condensed ? 11 : 14,
+                    }}
+                >
+                    {value}
+                </Text>
+            )}
+        </View>
+    )
+})
+
+const TableHourRow = memo(function TableHourRow({
+    hourVm,
+    timeWidth,
+    cellWidth,
+    onHourPress,
+    condensed,
+}: {
+    hourVm: ForecastHourViewModel
+    timeWidth: number
+    cellWidth: number
+    onHourPress: (hour: HourlyWeatherData) => void
+    condensed: boolean
+}) {
+    return (
+        <Pressable
+            className="flex-row"
+            onPress={() => onHourPress(hourVm.hour)}
+            accessibilityRole="button"
+            accessibilityLabel={`Hour ${hourVm.timeLabel}, ${hourVm.isSuitable ? 'safe to fly' : 'not safe to fly'}`}
+        >
+            <TableCell
+                value={hourVm.timeLabel}
+                width={timeWidth}
+                statusLabel={hourVm.isSuitable ? 'safe' : 'unsafe'}
+                condensed={condensed}
+            />
+            <TableCell
+                value={hourVm.tempDisplay}
+                isSafe={hourVm.tempCellSafe}
+                statusLabel={hourVm.tempStatus}
+                width={cellWidth}
+                condensed={condensed}
+            />
+            <TableCell
+                value={hourVm.windDisplay}
+                isSafe={hourVm.windCellSafe}
+                statusLabel={hourVm.windStatus}
+                width={cellWidth}
+                condensed={condensed}
+            />
+            <TableCell
+                value={hourVm.gustDisplay}
+                isSafe={hourVm.gustCellSafe}
+                statusLabel={hourVm.gustStatus}
+                width={cellWidth}
+                condensed={condensed}
+            />
+            <TableCell
+                value={hourVm.cloudDisplay}
+                isSafe="neutral"
+                statusLabel="informational"
+                width={cellWidth}
+                condensed={condensed}
+            />
+            <TableCell
+                value={hourVm.precipDisplay}
+                isSafe={hourVm.precipCellSafe}
+                statusLabel={hourVm.precipStatus}
+                width={cellWidth}
+                condensed={condensed}
+            />
+        </Pressable>
+    )
+})
+
+const TableView = memo(function TableView({
+    days,
+    screenWidth,
+    onHourPress,
+    condensed,
+    refreshing,
+    onRefresh,
+}: {
+    days: ForecastDayViewModel[]
+    screenWidth: number
+    utcOffsetSeconds: number
+    onHourPress: (hour: HourlyWeatherData) => void
+    condensed: boolean
+    refreshing: boolean
+    onRefresh: () => void
+}) {
+    const timeWidth = condensed ? 64 : 80
+    const cellWidth = (screenWidth - timeWidth) / 5
+
+    const rows = useMemo(() => {
+        const result: TableRow[] = []
+        for (const day of days) {
+            result.push({
+                kind: 'day',
+                date: day.date,
+                safeCount: day.safeCount,
+                total: day.totalHours,
+                key: `day-${day.date}`,
+            })
+            for (const hourVm of day.hours) {
+                result.push({
+                    kind: 'hour',
+                    hourVm,
+                    date: day.date,
+                    key: `hour-${hourVm.key}`,
+                })
+            }
+        }
+        return result
+    }, [days])
+
+    const keyExtractor = useCallback((row: TableRow) => row.key, [])
+
+    const renderItem = useCallback<ListRenderItem<TableRow>>(
+        ({ item: row }) => {
+            if (row.kind === 'day') {
+                return (
+                    <View
+                        className="flex-row items-center justify-between border-t border-b border-white/5 py-3 px-4"
+                        style={{
+                            width: screenWidth,
+                            backgroundColor: Theme.colors.surface,
+                            minHeight: Theme.touchTarget,
+                        }}
+                        accessibilityRole="header"
+                        accessibilityLabel={`${formatDayKey(row.date, 'full')}, ${row.safeCount} of ${row.total} flyable`}
+                    >
+                        <Text
+                            className="text-slate-100 font-semibold"
+                            style={{ fontFamily: 'Outfit-SemiBold' }}
+                        >
+                            {formatDayKey(row.date, 'full')}
+                        </Text>
+                        <View
+                            className="px-2.5 py-1 rounded-full"
+                            style={{
+                                backgroundColor:
+                                    row.safeCount > 0
+                                        ? Theme.colors.safeMuted
+                                        : Theme.colors.dangerMuted,
+                            }}
+                        >
+                            <Text
+                                className="text-xs font-medium"
+                                style={{
+                                    fontFamily: 'Outfit-SemiBold',
+                                    color:
+                                        row.safeCount > 0
+                                            ? Theme.colors.safe
+                                            : Theme.colors.danger,
+                                }}
+                            >
+                                {row.safeCount > 0 ? 'Safe' : 'Unsafe'}
+                            </Text>
+                        </View>
+                    </View>
+                )
+            }
+
+            return (
+                <TableHourRow
+                    hourVm={row.hourVm}
+                    timeWidth={timeWidth}
+                    cellWidth={cellWidth}
+                    onHourPress={onHourPress}
+                    condensed={condensed}
+                />
+            )
+        },
+        [screenWidth, timeWidth, cellWidth, onHourPress, condensed]
     )
 
     return (
@@ -873,11 +978,11 @@ function TableView({
             </View>
             <FlatList
                 data={rows}
-                keyExtractor={(row, index) =>
-                    row.kind === 'day'
-                        ? `day-${row.date}`
-                        : `hour-${row.date}-${index}`
-                }
+                keyExtractor={keyExtractor}
+                initialNumToRender={14}
+                maxToRenderPerBatch={10}
+                windowSize={7}
+                removeClippedSubviews={ANDROID_CLIP}
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
@@ -886,113 +991,8 @@ function TableView({
                         colors={[Theme.colors.accent]}
                     />
                 }
-                renderItem={({ item: row }) => {
-                    if (row.kind === 'day') {
-                        return (
-                            <View
-                                className="flex-row items-center justify-between border-t border-b border-white/5 py-3 px-4"
-                                style={{
-                                    width: screenWidth,
-                                    backgroundColor: Theme.colors.surface,
-                                    minHeight: Theme.touchTarget,
-                                }}
-                                accessibilityRole="header"
-                                accessibilityLabel={`${formatDayKey(row.date, 'full')}, ${row.safeCount} of ${row.total} flyable`}
-                            >
-                                <Text
-                                    className="text-slate-100 font-semibold"
-                                    style={{ fontFamily: 'Outfit-SemiBold' }}
-                                >
-                                    {formatDayKey(row.date, 'full')}
-                                </Text>
-                                <View
-                                    className="px-2.5 py-1 rounded-full"
-                                    style={{
-                                        backgroundColor:
-                                            row.safeCount > 0
-                                                ? Theme.colors.safeMuted
-                                                : Theme.colors.dangerMuted,
-                                    }}
-                                >
-                                    <Text
-                                        className="text-xs font-medium"
-                                        style={{
-                                            fontFamily: 'Outfit-SemiBold',
-                                            color:
-                                                row.safeCount > 0
-                                                    ? Theme.colors.safe
-                                                    : Theme.colors.danger,
-                                        }}
-                                    >
-                                        {row.safeCount > 0 ? 'Safe' : 'Unsafe'}
-                                    </Text>
-                                </View>
-                            </View>
-                        )
-                    }
-
-                    const { hour } = row
-                    const cond = DroneFlyabilityService.checkFlyingConditions(
-                        hour,
-                        thresholds
-                    )
-                    const tempStatus = getCheckStatus(cond, 'temperature')
-                    const windStatus = getCheckStatus(cond, 'windSpeed')
-                    const gustStatus = getCheckStatus(cond, 'windGust')
-                    const precipStatus = getCheckStatus(cond, 'precipitation')
-                    return (
-                        <Pressable
-                            className="flex-row"
-                            onPress={() => onHourPress(hour)}
-                            accessibilityRole="button"
-                            accessibilityLabel={`Hour ${formatLocationTime(hour.time, utcOffsetSeconds)}, ${cond.isSuitable ? 'safe to fly' : 'not safe to fly'}`}
-                        >
-                            <TableCell
-                                value={formatLocationTime(
-                                    hour.time,
-                                    utcOffsetSeconds
-                                )}
-                                width={timeWidth}
-                                statusLabel={
-                                    cond.isSuitable ? 'safe' : 'unsafe'
-                                }
-                            />
-                            <TableCell
-                                value={formatTemp(hour.temperature2m)}
-                                isSafe={checkStatusToCellSafe(tempStatus)}
-                                statusLabel={tempStatus}
-                                width={cellWidth}
-                            />
-                            <TableCell
-                                value={formatWind(hour.windSpeed10m)}
-                                isSafe={checkStatusToCellSafe(windStatus)}
-                                statusLabel={windStatus}
-                                width={cellWidth}
-                            />
-                            <TableCell
-                                value={formatWind(hour.windGusts10m)}
-                                isSafe={checkStatusToCellSafe(gustStatus)}
-                                statusLabel={gustStatus}
-                                width={cellWidth}
-                            />
-                            <TableCell
-                                value={formatPercentDisplay(hour.cloudCover)}
-                                isSafe="neutral"
-                                statusLabel="informational"
-                                width={cellWidth}
-                            />
-                            <TableCell
-                                value={formatPercentDisplay(
-                                    hour.precipitationProbability
-                                )}
-                                isSafe={checkStatusToCellSafe(precipStatus)}
-                                statusLabel={precipStatus}
-                                width={cellWidth}
-                            />
-                        </Pressable>
-                    )
-                }}
+                renderItem={renderItem}
             />
         </>
     )
-}
+})

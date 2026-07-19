@@ -156,6 +156,34 @@ export class WeatherCacheService {
         }
     }
 
+    /**
+     * One AsyncStorage read for many coordinates. Map keys use the same
+     * rounded coord key as single-location lookups (`lat.toFixed(3),lng`).
+     */
+    static async getCachedWeatherBatch(
+        locations: { latitude: number; longitude: number }[]
+    ): Promise<Map<string, WeatherData>> {
+        const result = new Map<string, WeatherData>()
+        if (locations.length === 0) return result
+
+        try {
+            const store = await readStore()
+            for (const { latitude, longitude } of locations) {
+                const key = coordKey(latitude, longitude)
+                if (result.has(key)) continue
+
+                const entry = findEntryForCoords(store, latitude, longitude)
+                if (entry && !isCacheExpired(entry.timestamp)) {
+                    result.set(key, reviveWeatherData(entry.data))
+                }
+            }
+            return result
+        } catch (error) {
+            console.error('Error getting cached weather batch:', error)
+            return result
+        }
+    }
+
     static async cacheWeather(
         data: WeatherData,
         latitude: number,

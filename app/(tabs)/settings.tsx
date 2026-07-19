@@ -8,7 +8,7 @@ import {
 } from 'react-native'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import Constants from 'expo-constants'
 import * as Location from 'expo-location'
 

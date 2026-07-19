@@ -7,7 +7,7 @@ import {
     useWindowDimensions,
     AccessibilityInfo,
 } from 'react-native'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { DroneFlyabilityService } from '@/services/droneFlyabilityService'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
 import { useWeatherData } from '@/contexts/WeatherDataContext'
