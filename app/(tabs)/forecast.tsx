@@ -48,6 +48,24 @@ import { DataFreshnessBanner } from '@/components/ui/DataFreshnessBanner'
 import { EmptyState } from '@/components/ui/StatusBanner'
 
 const ANDROID_CLIP = Platform.OS === 'android'
+const IS_IOS = Platform.OS === 'ios'
+
+/** Tighter on Android (with clipping); slightly larger windows on iOS to reduce scroll mount bursts. */
+const CARDS_LIST_WINDOW = {
+    initialNumToRender: IS_IOS ? 4 : 2,
+    maxToRenderPerBatch: IS_IOS ? 3 : 2,
+    windowSize: IS_IOS ? 7 : 3,
+} as const
+const HOUR_STRIP_WINDOW = {
+    initialNumToRender: IS_IOS ? 8 : 6,
+    maxToRenderPerBatch: IS_IOS ? 6 : 4,
+    windowSize: IS_IOS ? 5 : 3,
+} as const
+const TABLE_LIST_WINDOW = {
+    initialNumToRender: IS_IOS ? 10 : 6,
+    maxToRenderPerBatch: IS_IOS ? 6 : 4,
+    windowSize: IS_IOS ? 7 : 5,
+} as const
 
 const forecastPaneStyles = StyleSheet.create({
     visible: { flex: 1 },
@@ -312,9 +330,13 @@ export default function ForecastTable() {
                             className="flex-1"
                             showsVerticalScrollIndicator={false}
                             contentContainerStyle={{ paddingBottom: 32 }}
-                            initialNumToRender={2}
-                            maxToRenderPerBatch={2}
-                            windowSize={3}
+                            initialNumToRender={
+                                CARDS_LIST_WINDOW.initialNumToRender
+                            }
+                            maxToRenderPerBatch={
+                                CARDS_LIST_WINDOW.maxToRenderPerBatch
+                            }
+                            windowSize={CARDS_LIST_WINDOW.windowSize}
                             removeClippedSubviews={ANDROID_CLIP}
                             refreshControl={
                                 <RefreshControl
@@ -716,9 +738,9 @@ const DayCardStrip = memo(function DayCardStrip({
                     showsHorizontalScrollIndicator={false}
                     className="py-3 px-3"
                     contentContainerStyle={{ paddingRight: 16 }}
-                    initialNumToRender={6}
-                    maxToRenderPerBatch={4}
-                    windowSize={3}
+                    initialNumToRender={HOUR_STRIP_WINDOW.initialNumToRender}
+                    maxToRenderPerBatch={HOUR_STRIP_WINDOW.maxToRenderPerBatch}
+                    windowSize={HOUR_STRIP_WINDOW.windowSize}
                     removeClippedSubviews={ANDROID_CLIP}
                 />
             ) : (
@@ -1048,9 +1070,9 @@ const TableView = memo(function TableView({
             <FlatList
                 data={rows}
                 keyExtractor={keyExtractor}
-                initialNumToRender={6}
-                maxToRenderPerBatch={4}
-                windowSize={5}
+                initialNumToRender={TABLE_LIST_WINDOW.initialNumToRender}
+                maxToRenderPerBatch={TABLE_LIST_WINDOW.maxToRenderPerBatch}
+                windowSize={TABLE_LIST_WINDOW.windowSize}
                 removeClippedSubviews={ANDROID_CLIP}
                 refreshControl={
                     <RefreshControl

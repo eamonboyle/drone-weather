@@ -11,12 +11,9 @@ import { enableFreeze } from 'react-native-screens'
 import { LocationProvider } from '@/contexts/LocationContext'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { Outfit_400Regular } from '@expo-google-fonts/outfit/400Regular'
-import { Outfit_500Medium } from '@expo-google-fonts/outfit/500Medium'
 import { Outfit_600SemiBold } from '@expo-google-fonts/outfit/600SemiBold'
-import { Outfit_700Bold } from '@expo-google-fonts/outfit/700Bold'
 import { DMSans_400Regular } from '@expo-google-fonts/dm-sans/400Regular'
 import { DMSans_500Medium } from '@expo-google-fonts/dm-sans/500Medium'
-import { DMSans_600SemiBold } from '@expo-google-fonts/dm-sans/600SemiBold'
 import Ionicons from '@expo/vector-icons/Ionicons'
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 
@@ -39,14 +36,12 @@ SplashScreen.preventAutoHideAsync()
 enableFreeze(true)
 
 export default function RootLayout() {
+    // Only faces referenced via fontFamily + icon fonts used in tabs/chrome.
     const [loaded, error] = useFonts({
         Outfit: Outfit_400Regular,
-        'Outfit-Medium': Outfit_500Medium,
         'Outfit-SemiBold': Outfit_600SemiBold,
-        'Outfit-Bold': Outfit_700Bold,
         DMSans: DMSans_400Regular,
         'DMSans-Medium': DMSans_500Medium,
-        'DMSans-SemiBold': DMSans_600SemiBold,
         ...Ionicons.font,
         ...MaterialCommunityIcons.font,
     })
@@ -62,10 +57,8 @@ export default function RootLayout() {
         }
     }, [loaded])
 
-    if (!loaded) {
-        return null
-    }
-
+    // Mount data providers immediately so GPS / cache / weather can start while
+    // fonts finish loading. Only gate the navigator (and splash) on fonts.
     return (
         <ThemeProvider value={DarkTheme}>
             <GestureHandlerRootView style={{ flex: 1 }}>
@@ -73,29 +66,35 @@ export default function RootLayout() {
                     <WeatherConfigProvider>
                         <WeatherDataProvider>
                             <LocationProvider>
-                                <Stack
-                                    screenOptions={{
-                                        headerShown: false,
-                                        contentStyle: { backgroundColor: '#08090c' },
-                                        animation: 'default',
-                                        freezeOnBlur: true,
-                                    }}
-                                >
-                                    <Stack.Screen
-                                        name="(tabs)"
-                                        options={{ headerShown: false }}
-                                    />
-                                    <Stack.Screen
-                                        name="location"
-                                        options={{
-                                            headerShown: false,
-                                            animation: 'simple_push',
-                                            presentation: 'card',
-                                            freezeOnBlur: true,
-                                        }}
-                                    />
-                                </Stack>
-                                <StatusBar style="light" />
+                                {loaded ? (
+                                    <>
+                                        <Stack
+                                            screenOptions={{
+                                                headerShown: false,
+                                                contentStyle: {
+                                                    backgroundColor: '#08090c',
+                                                },
+                                                animation: 'default',
+                                                freezeOnBlur: true,
+                                            }}
+                                        >
+                                            <Stack.Screen
+                                                name="(tabs)"
+                                                options={{ headerShown: false }}
+                                            />
+                                            <Stack.Screen
+                                                name="location"
+                                                options={{
+                                                    headerShown: false,
+                                                    animation: 'simple_push',
+                                                    presentation: 'card',
+                                                    freezeOnBlur: true,
+                                                }}
+                                            />
+                                        </Stack>
+                                        <StatusBar style="light" />
+                                    </>
+                                ) : null}
                             </LocationProvider>
                         </WeatherDataProvider>
                     </WeatherConfigProvider>

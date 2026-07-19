@@ -52,6 +52,10 @@ export default function Home() {
     const [refreshing, setRefreshing] = useState(false)
     const [reduceMotion, setReduceMotion] = useState(false)
 
+    const handleHourInitialized = useCallback(() => {
+        setHasInitializedHour(true)
+    }, [])
+
     const [fadeAnim] = useState(() => new Animated.Value(0))
     const [translateY] = useState(() => new Animated.Value(20))
 
@@ -300,9 +304,7 @@ export default function Home() {
                                 selectedHour={selectedHour}
                                 onHourChange={setSelectedHour}
                                 hasInitialized={hasInitializedHour}
-                                onInitialized={() =>
-                                    setHasInitializedHour(true)
-                                }
+                                onInitialized={handleHourInitialized}
                                 className="pt-2"
                             />
                         </View>

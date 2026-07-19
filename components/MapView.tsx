@@ -182,7 +182,9 @@ export function DroneMapView() {
                         style={styles.map}
                         javaScriptEnabled
                         domStorageEnabled
-                        cacheEnabled={false}
+                        // Android: disable cache to avoid a stuck/degraded Maps shell.
+                        // iOS WKWebView: keep cache so remount-on-focus reuses assets.
+                        cacheEnabled={Platform.OS !== 'android'}
                         thirdPartyCookiesEnabled
                         sharedCookiesEnabled
                         setSupportMultipleWindows={false}
@@ -203,6 +205,10 @@ export function DroneMapView() {
                         }}
                         onLoadEnd={markReady}
                         onNavigationStateChange={handleNavigationChange}
+                        onContentProcessDidTerminate={() => {
+                            // WKWebView can kill the content process under memory pressure.
+                            setReloadKey((k) => k + 1)
+                        }}
                         onError={() => {
                             clearLoadTimeout()
                             loadFailedRef.current = true
