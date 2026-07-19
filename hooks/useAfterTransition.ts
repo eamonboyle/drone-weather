@@ -1,21 +1,54 @@
 import { useEffect, useState } from 'react'
-import { InteractionManager } from 'react-native'
+import { useNavigation } from 'expo-router'
 
 /**
- * Returns true once the current navigation transition and interactions have
- * finished. Use to defer autofocus, network fetches, and other heavy work so
- * stack push/pop animations stay on the native thread.
+ * Returns true after the current navigation transition ends (when available),
+ * then an idle paint handoff (double rAF + setTimeout(0)).
+ * Falls back after a short settle window if no transitionEnd fires (e.g. tabs).
  */
 export function useAfterTransition() {
     const [ready, setReady] = useState(false)
+    const navigation = useNavigation()
 
     useEffect(() => {
-        const handle = InteractionManager.runAfterInteractions(() => {
-            setReady(true)
-        })
+        let cancelled = false
+        let settled = false
+        let idleTimer: ReturnType<typeof setTimeout> | null = null
+        let fallbackTimer: ReturnType<typeof setTimeout> | null = null
+        let raf1 = 0
+        let raf2 = 0
 
-        return () => handle.cancel()
-    }, [])
+        const armIdle = () => {
+            if (cancelled || settled) return
+            settled = true
+            raf1 = requestAnimationFrame(() => {
+                raf2 = requestAnimationFrame(() => {
+                    idleTimer = setTimeout(() => {
+                        if (!cancelled) setReady(true)
+                    }, 0)
+                })
+            })
+        }
+
+        // Stack pushes emit transitionEnd; subscribe before fallback.
+        const unsubscribe = navigation.addListener(
+            // Typed loosely: not all navigators declare this event.
+            'transitionEnd' as never,
+            armIdle
+        )
+
+        // If no transition is in flight (or event already passed), settle soon.
+        fallbackTimer = setTimeout(armIdle, 320)
+
+        return () => {
+            cancelled = true
+            unsubscribe()
+            if (fallbackTimer) clearTimeout(fallbackTimer)
+            if (idleTimer) clearTimeout(idleTimer)
+            if (raf1) cancelAnimationFrame(raf1)
+            if (raf2) cancelAnimationFrame(raf2)
+        }
+    }, [navigation])
 
     return ready
 }

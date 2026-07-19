@@ -12,7 +12,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "expo lint -- --max-warnings=0",
     "build:android": "eas build --platform android --profile preview",
-    "perf:android-audit": "powershell -ExecutionPolicy Bypass -File ./scripts/android-perf-audit.ps1",
+    "perf:android-audit": "powershell -ExecutionPolicy Bypass -File ./scripts/android-perf-audit.ps1 -Suite Core",
+    "perf:android-audit:all": "powershell -ExecutionPolicy Bypass -File ./scripts/android-perf-audit.ps1 -Suite All",
+    "perf:android-audit:map": "powershell -ExecutionPolicy Bypass -File ./scripts/android-perf-audit.ps1 -Suite Map",
     "format": "prettier --write ."
   },
   "jest": {

@@ -8,6 +8,7 @@ import {
     Platform,
     PixelRatio,
     ListRenderItem,
+    StyleSheet,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
@@ -48,6 +49,13 @@ import { EmptyState } from '@/components/ui/StatusBanner'
 
 const ANDROID_CLIP = Platform.OS === 'android'
 
+const forecastPaneStyles = StyleSheet.create({
+    visible: { flex: 1 },
+    hidden: { display: 'none' },
+})
+
+type ForecastViewMode = 'cards' | 'table'
+
 export default function ForecastTable() {
     const { locationName, errorMsg } = useLocation()
     const { thresholds } = useWeatherConfig()
@@ -62,7 +70,11 @@ export default function ForecastTable() {
     } = useWeatherForLocation()
     const { width: screenWidth, fontScale } = useWindowDimensions()
     const condensed = fontScale > 1.15 || PixelRatio.getFontScale() > 1.15
-    const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
+    const [viewMode, setViewMode] = useState<ForecastViewMode>('cards')
+    // Mount each mode once, then keep it (display:none) so switches avoid remount.
+    const [mountedModes, setMountedModes] = useState<
+        Record<ForecastViewMode, boolean>
+    >({ cards: true, table: false })
     const [refreshing, setRefreshing] = useState(false)
     // undefined = default to today once view model is ready; null = user collapsed all
     const [expandedDay, setExpandedDay] = useState<string | null | undefined>(
@@ -117,8 +129,11 @@ export default function ForecastTable() {
         setFlyabilityFilter(id)
     }, [])
 
-    const handleViewModeChange = useCallback((mode: 'cards' | 'table') => {
+    const handleViewModeChange = useCallback((mode: ForecastViewMode) => {
         setViewMode(mode)
+        setMountedModes((prev) =>
+            prev[mode] ? prev : { ...prev, [mode]: true }
+        )
     }, [])
 
     const toggleDay = useCallback(
@@ -267,49 +282,103 @@ export default function ForecastTable() {
                 />
             </View>
 
-            {displayDays.length === 0 ? (
-                <EmptyState
-                    icon="calendar-search"
-                    message={
-                        flyabilityFilter === 'flyable'
-                            ? 'No flyable hours in the forecast'
-                            : flyabilityFilter === 'blocked'
-                              ? 'No blocked hours in the forecast'
-                              : 'No forecast hours available'
-                    }
-                />
-            ) : viewMode === 'cards' ? (
-                <FlatList
-                    data={displayDays}
-                    keyExtractor={dayKeyExtractor}
-                    className="flex-1"
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{ paddingBottom: 32 }}
-                    initialNumToRender={4}
-                    maxToRenderPerBatch={3}
-                    windowSize={5}
-                    removeClippedSubviews={ANDROID_CLIP}
-                    refreshControl={
-                        <RefreshControl
+            {/* Keep panes mounted across empty filters so Cards ↔ Table and
+                filter restores do not remount heavy lists. */}
+            <View className="flex-1">
+                {mountedModes.cards ? (
+                    <View
+                        style={
+                            viewMode === 'cards'
+                                ? forecastPaneStyles.visible
+                                : forecastPaneStyles.hidden
+                        }
+                        pointerEvents={
+                            viewMode === 'cards' && displayDays.length > 0
+                                ? 'auto'
+                                : 'none'
+                        }
+                        accessibilityElementsHidden={
+                            viewMode !== 'cards' || displayDays.length === 0
+                        }
+                        importantForAccessibility={
+                            viewMode === 'cards' && displayDays.length > 0
+                                ? 'yes'
+                                : 'no-hide-descendants'
+                        }
+                    >
+                        <FlatList
+                            data={displayDays}
+                            keyExtractor={dayKeyExtractor}
+                            className="flex-1"
+                            showsVerticalScrollIndicator={false}
+                            contentContainerStyle={{ paddingBottom: 32 }}
+                            initialNumToRender={2}
+                            maxToRenderPerBatch={2}
+                            windowSize={3}
+                            removeClippedSubviews={ANDROID_CLIP}
+                            refreshControl={
+                                <RefreshControl
+                                    refreshing={refreshing}
+                                    onRefresh={onRefresh}
+                                    tintColor={Theme.colors.accent}
+                                    colors={[Theme.colors.accent]}
+                                />
+                            }
+                            renderItem={renderDayCard}
+                        />
+                    </View>
+                ) : null}
+                {mountedModes.table ? (
+                    <View
+                        style={
+                            viewMode === 'table'
+                                ? forecastPaneStyles.visible
+                                : forecastPaneStyles.hidden
+                        }
+                        pointerEvents={
+                            viewMode === 'table' && displayDays.length > 0
+                                ? 'auto'
+                                : 'none'
+                        }
+                        accessibilityElementsHidden={
+                            viewMode !== 'table' || displayDays.length === 0
+                        }
+                        importantForAccessibility={
+                            viewMode === 'table' && displayDays.length > 0
+                                ? 'yes'
+                                : 'no-hide-descendants'
+                        }
+                    >
+                        <TableView
+                            days={displayDays}
+                            screenWidth={screenWidth}
+                            utcOffsetSeconds={utcOffsetSeconds}
+                            onHourPress={handleHourPress}
+                            condensed={condensed}
                             refreshing={refreshing}
                             onRefresh={onRefresh}
-                            tintColor={Theme.colors.accent}
-                            colors={[Theme.colors.accent]}
                         />
-                    }
-                    renderItem={renderDayCard}
-                />
-            ) : (
-                <TableView
-                    days={displayDays}
-                    screenWidth={screenWidth}
-                    utcOffsetSeconds={utcOffsetSeconds}
-                    onHourPress={handleHourPress}
-                    condensed={condensed}
-                    refreshing={refreshing}
-                    onRefresh={onRefresh}
-                />
-            )}
+                    </View>
+                ) : null}
+                {displayDays.length === 0 ? (
+                    <View
+                        style={StyleSheet.absoluteFill}
+                        pointerEvents="box-none"
+                        accessibilityElementsHidden={false}
+                    >
+                        <EmptyState
+                            icon="calendar-search"
+                            message={
+                                flyabilityFilter === 'flyable'
+                                    ? 'No flyable hours in the forecast'
+                                    : flyabilityFilter === 'blocked'
+                                      ? 'No blocked hours in the forecast'
+                                      : 'No forecast hours available'
+                            }
+                        />
+                    </View>
+                ) : null}
+            </View>
 
             <WeatherDetailsModal
                 isVisible={isModalVisible}
@@ -647,8 +716,8 @@ const DayCardStrip = memo(function DayCardStrip({
                     showsHorizontalScrollIndicator={false}
                     className="py-3 px-3"
                     contentContainerStyle={{ paddingRight: 16 }}
-                    initialNumToRender={8}
-                    maxToRenderPerBatch={8}
+                    initialNumToRender={6}
+                    maxToRenderPerBatch={4}
                     windowSize={3}
                     removeClippedSubviews={ANDROID_CLIP}
                 />
@@ -979,9 +1048,9 @@ const TableView = memo(function TableView({
             <FlatList
                 data={rows}
                 keyExtractor={keyExtractor}
-                initialNumToRender={14}
-                maxToRenderPerBatch={10}
-                windowSize={7}
+                initialNumToRender={6}
+                maxToRenderPerBatch={4}
+                windowSize={5}
                 removeClippedSubviews={ANDROID_CLIP}
                 refreshControl={
                     <RefreshControl

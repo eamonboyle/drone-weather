@@ -1,10 +1,8 @@
 appId: com.eamonsdiary.droneweather
 ---
-# Full journey (includes Map). Prefer performance-core.yaml for acceptance.
+# Core navigation / Forecast path — excludes Map WebView.
 - launchApp
 - tapOn: "Home"
-- tapOn: "Map"
-- assertVisible: "Map"
 - tapOn: "Forecast"
 - assertVisible: "Forecast"
 - assertVisible: "Cards"
@@ -25,3 +23,4 @@ appId: com.eamonsdiary.droneweather
 - back
 - tapOn: "Settings"
 - assertVisible: "Settings"
+- tapOn: "Home"

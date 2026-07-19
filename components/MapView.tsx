@@ -43,6 +43,7 @@ export function DroneMapView() {
     const hasMarkedReady = useRef(false)
     const loadFailedRef = useRef(false)
     const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const webViewRef = useRef<WebView>(null)
 
     // Pin center so GPS ticker updates don't reload the WebView forever
     const [center, setCenter] = useState<MapCenter>(() => ({
@@ -104,6 +105,23 @@ export function DroneMapView() {
         return clearLoadTimeout
     }, [mapUrl, reloadKey, beginLoad, clearLoadTimeout])
 
+    // Tear down Google Maps document before native WebView destroy.
+    useEffect(() => {
+        return () => {
+            clearLoadTimeout()
+            const webView = webViewRef.current
+            if (!webView) return
+            try {
+                webView.stopLoading()
+                webView.injectJavaScript(
+                    'try{window.location.replace("about:blank")}catch(e){}'
+                )
+            } catch {
+                // Best-effort; unmount still proceeds.
+            }
+        }
+    }, [clearLoadTimeout])
+
     const handleRetry = () => {
         setReloadKey((k) => k + 1)
     }
@@ -158,11 +176,13 @@ export function DroneMapView() {
             <View style={styles.mapContainer}>
                 {loadState === 'loading' || loadState === 'ready' ? (
                     <WebView
+                        ref={webViewRef}
                         key={`${reloadKey}-${center.latitude.toFixed(4)}-${center.longitude.toFixed(4)}`}
                         source={{ uri: mapUrl }}
                         style={styles.map}
                         javaScriptEnabled
                         domStorageEnabled
+                        cacheEnabled={false}
                         thirdPartyCookiesEnabled
                         sharedCookiesEnabled
                         setSupportMultipleWindows={false}
