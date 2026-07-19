@@ -261,7 +261,7 @@ export default function SettingsScreen() {
 
     if (isLoading) {
         return (
-            <SafeAreaView className="flex-1 bg-background">
+            <SafeAreaView className="flex-1 bg-background" edges={['top']}>
                 <View className="flex-1 justify-center items-center">
                     <ActivityIndicator color={Theme.colors.accent} />
                     <Text
@@ -279,7 +279,7 @@ export default function SettingsScreen() {
         Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? '1.0.0'
 
     return (
-        <SafeAreaView className="flex-1 bg-background">
+        <SafeAreaView className="flex-1 bg-background" edges={['top']}>
             <LocationBar locationName={locationName || 'Select Location'} />
             <ScrollView className="flex-1 px-4 pt-4">
                 {isSaving && (

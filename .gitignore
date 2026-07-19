@@ -42,3 +42,6 @@ yarn-error.*
 app-example
 
 .env
+
+# Local iOS audit screenshots / helpers
+.tmp-ios-audit/

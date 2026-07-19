@@ -230,22 +230,27 @@ export function WeatherDetailsModal({
     )
     const cloudCover = formatPercentDisplay(hourData.cloudCover)
 
+    const isIosSheet = Platform.OS === 'ios'
+
     return (
         <Modal
             visible={isVisible}
-            transparent
-            animationType="fade"
+            transparent={!isIosSheet}
+            animationType={isIosSheet ? 'slide' : 'fade'}
+            presentationStyle={isIosSheet ? 'pageSheet' : 'overFullScreen'}
             onRequestClose={onClose}
             accessibilityViewIsModal
         >
             <Pressable
-                style={styles.backdrop}
-                onPress={onClose}
-                accessibilityRole="button"
-                accessibilityLabel="Dismiss weather details"
+                style={isIosSheet ? styles.sheetRoot : styles.backdrop}
+                onPress={isIosSheet ? undefined : onClose}
+                accessibilityRole={isIosSheet ? undefined : 'button'}
+                accessibilityLabel={
+                    isIosSheet ? undefined : 'Dismiss weather details'
+                }
             >
                 <Pressable
-                    style={styles.modalCard}
+                    style={isIosSheet ? styles.sheetCard : styles.modalCard}
                     onPress={(e) => e.stopPropagation()}
                     accessibilityLabel="Weather details"
                 >
@@ -387,6 +392,14 @@ const styles = StyleSheet.create({
         padding: 20,
         backgroundColor: 'rgba(0, 0, 0, 0.8)',
     },
+    sheetRoot: {
+        flex: 1,
+        backgroundColor: Theme.colors.surfaceElevated,
+    },
+    sheetCard: {
+        flex: 1,
+        backgroundColor: Theme.colors.surfaceElevated,
+    },
     modalCard: {
         width: '100%',
         maxWidth: 400,
@@ -397,10 +410,10 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(245, 158, 11, 0.6)',
         ...Platform.select({
             ios: {
-                shadowColor: Theme.colors.accent,
-                shadowOffset: { width: 0, height: 0 },
-                shadowOpacity: 0.25,
-                shadowRadius: 24,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.35,
+                shadowRadius: 16,
             },
             android: {
                 elevation: 24,

@@ -6,8 +6,10 @@ import {
     Pressable,
     useWindowDimensions,
     AccessibilityInfo,
+    Platform,
 } from 'react-native'
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
+import { selectionHaptic } from '@/utils/haptics'
 import { DroneFlyabilityService } from '@/services/droneFlyabilityService'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
 import { useWeatherData } from '@/contexts/WeatherDataContext'
@@ -174,11 +176,20 @@ export function HourSelector({
     }, [selectedHour])
 
     const handleCurrentHourPress = useCallback(() => {
+        selectionHaptic()
         onHourChange(currentHour)
         void AccessibilityInfo.announceForAccessibility(
             `Selected current hour, ${currentHour}H`
         )
     }, [currentHour, onHourChange])
+
+    const handleHourPress = useCallback(
+        (hour: number) => {
+            selectionHaptic()
+            onHourChange(hour)
+        },
+        [onHourChange]
+    )
 
     if (!weatherData) return null
 
@@ -195,8 +206,17 @@ export function HourSelector({
                     onPress={handleCurrentHourPress}
                     accessibilityRole="button"
                     accessibilityLabel={`Jump to current hour, ${currentHour}H`}
-                    className="ml-4 flex-row items-center bg-amber-500 px-3 py-1.5 rounded-full"
-                    style={{ minHeight: 44, minWidth: 44 }}
+                    className="ml-4 flex-row items-center px-3 py-1.5"
+                    style={({ pressed }) => ({
+                        minHeight: 44,
+                        minWidth: 44,
+                        borderRadius:
+                            Platform.OS === 'ios'
+                                ? Theme.borderRadius.sm
+                                : Theme.borderRadius.full,
+                        backgroundColor: Theme.colors.accent,
+                        opacity: pressed ? 0.85 : 1,
+                    })}
                 >
                     <MaterialCommunityIcons
                         name="clock"
@@ -206,6 +226,7 @@ export function HourSelector({
                     <Text
                         className="text-background text-sm font-semibold ml-1.5"
                         style={{ fontFamily: 'Outfit-SemiBold' }}
+                        maxFontSizeMultiplier={1.2}
                     >
                         Now
                     </Text>
@@ -250,14 +271,17 @@ export function HourSelector({
                         return (
                             <Pressable
                                 key={key}
-                                onPress={() => onHourChange(hour)}
+                                onPress={() => handleHourPress(hour)}
                                 accessibilityRole="button"
                                 accessibilityState={{
                                     selected: isSelected,
                                 }}
                                 accessibilityLabel={`${hour}H, ${statusWord}`}
                                 className="w-[60px] items-center py-2"
-                                style={{ minHeight: 44 }}
+                                style={({ pressed }) => ({
+                                    minHeight: 44,
+                                    opacity: pressed ? 0.75 : 1,
+                                })}
                             >
                                 <View
                                     className={`w-9 h-9 rounded-full items-center justify-center ${containerClass}`}

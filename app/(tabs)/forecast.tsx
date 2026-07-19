@@ -196,7 +196,7 @@ export default function ForecastTable() {
 
     if (isBootstrapping) {
         return (
-            <SafeAreaView className="flex-1 bg-background">
+            <SafeAreaView className="flex-1 bg-background" edges={['top']}>
                 <LocationBar locationName={locationName} />
                 <LoadingSpinner
                     text="Loading forecast data..."
@@ -209,7 +209,7 @@ export default function ForecastTable() {
     if (!weatherData || !viewModel) {
         const message = error ?? errorMsg ?? 'No weather data available'
         return (
-            <SafeAreaView className="flex-1 bg-background">
+            <SafeAreaView className="flex-1 bg-background" edges={['top']}>
                 <LocationBar locationName={locationName} />
                 <EmptyState
                     icon="cloud-off-outline"
@@ -225,7 +225,7 @@ export default function ForecastTable() {
         weatherData.meta?.source ?? WEATHER_SOURCE_OPEN_METEO
 
     return (
-        <SafeAreaView className="flex-1 bg-background">
+        <SafeAreaView className="flex-1 bg-background" edges={['top']}>
             <LocationBar locationName={locationName} />
 
             <ForecastPlanningSummary
@@ -284,6 +284,7 @@ export default function ForecastTable() {
                     value={flyabilityFilter}
                     onChange={handleFilterChange}
                     condensed={condensed}
+                    expand
                 />
             </View>
 

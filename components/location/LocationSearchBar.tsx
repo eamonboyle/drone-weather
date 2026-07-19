@@ -1,5 +1,6 @@
-import { View, TextInput, Pressable, ActivityIndicator } from 'react-native'
+import { View, TextInput, Pressable, ActivityIndicator, Platform } from 'react-native'
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
+import { Theme } from '@/constants/Theme'
 
 interface LocationSearchBarProps {
     value: string
@@ -22,18 +23,18 @@ export function LocationSearchBar({
         <View className="px-4 pb-3">
             <View
                 className="flex-row items-center rounded-2xl px-4 h-12 border border-white/5"
-                style={{ backgroundColor: '#161a20' }}
+                style={{ backgroundColor: Theme.colors.surfaceElevated }}
             >
                 <MaterialCommunityIcons
                     name="magnify"
                     size={22}
-                    color="#f59e0b"
+                    color={Theme.colors.accent}
                 />
                 <TextInput
                     className="flex-1 ml-3 text-slate-100 text-base"
                     style={{ fontFamily: 'DMSans' }}
                     placeholder="Search launch sites..."
-                    placeholderTextColor="#64748b"
+                    placeholderTextColor={Theme.colors.textMuted}
                     value={value}
                     onChangeText={onChangeText}
                     editable={!disabled}
@@ -41,23 +42,34 @@ export function LocationSearchBar({
                     returnKeyType="search"
                     autoCorrect={false}
                     autoCapitalize="words"
+                    spellCheck={false}
+                    keyboardAppearance={
+                        Platform.OS === 'ios' ? 'dark' : undefined
+                    }
+                    clearButtonMode={
+                        Platform.OS === 'ios' ? 'while-editing' : 'never'
+                    }
                     accessibilityLabel="Search launch sites"
                 />
                 {isSearching ? (
-                    <ActivityIndicator size="small" color="#f59e0b" />
-                ) : value.length > 0 ? (
+                    <ActivityIndicator size="small" color={Theme.colors.accent} />
+                ) : value.length > 0 && Platform.OS !== 'ios' ? (
                     <Pressable
                         onPress={onClear}
                         className="p-1"
                         hitSlop={8}
                         accessibilityRole="button"
                         accessibilityLabel="Clear location search"
-                        style={{ minHeight: 44, minWidth: 44, justifyContent: 'center' }}
+                        style={{
+                            minHeight: 44,
+                            minWidth: 44,
+                            justifyContent: 'center',
+                        }}
                     >
                         <MaterialCommunityIcons
                             name="close-circle"
                             size={20}
-                            color="#64748b"
+                            color={Theme.colors.textMuted}
                         />
                     </Pressable>
                 ) : null}

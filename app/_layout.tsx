@@ -4,6 +4,7 @@ import { Stack } from 'expo-router'
 import * as SplashScreen from 'expo-splash-screen'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect } from 'react'
+import { Platform } from 'react-native'
 // Required by NativeWind / react-native-css-interop (and Reanimated babel plugin).
 import 'react-native-reanimated'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
@@ -87,7 +88,11 @@ export default function RootLayout() {
                                                 options={{
                                                     headerShown: false,
                                                     animation: 'simple_push',
-                                                    presentation: 'card',
+                                                    // iOS sheet feels native for location search; Android keeps a card.
+                                                    presentation:
+                                                        Platform.OS === 'ios'
+                                                            ? 'modal'
+                                                            : 'card',
                                                     freezeOnBlur: true,
                                                 }}
                                             />

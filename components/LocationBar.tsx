@@ -3,6 +3,7 @@ import Ionicons from '@expo/vector-icons/Ionicons'
 import { useState } from 'react'
 import { useRouter } from 'expo-router'
 import { useLocation } from '@/contexts/LocationContext'
+import { lightImpactHaptic } from '@/utils/haptics'
 
 interface LocationBarProps {
     locationName: string
@@ -26,6 +27,7 @@ export function LocationBar({ locationName }: LocationBarProps) {
         if (isLoading) return
 
         setIsLoading(true)
+        lightImpactHaptic()
         try {
             await refreshLocation()
         } catch (error) {
