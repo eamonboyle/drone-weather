@@ -3,7 +3,7 @@ module.exports = {
         name: 'drone-weather',
         slug: 'drone-weather',
         version: '1.0.0',
-        orientation: 'portrait',
+        orientation: 'default',
         icon: './assets/images/icon.png',
         scheme: 'myapp',
         userInterfaceStyle: 'automatic',
@@ -16,6 +16,11 @@ module.exports = {
         assetBundlePatterns: ['**/*'],
         ios: {
             supportsTablet: true,
+            bundleIdentifier: 'com.eamonsdiary.droneweather',
+            infoPlist: {
+                NSLocationWhenInUseUsageDescription:
+                    'Drone Weather uses your location to show local flying conditions and forecasts.',
+            },
         },
         android: {
             package: 'com.eamonsdiary.droneweather',
@@ -23,6 +28,7 @@ module.exports = {
                 foregroundImage: './assets/images/adaptive-icon.png',
                 backgroundColor: '#08090c',
             },
+            permissions: ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION'],
         },
         web: {
             bundler: 'metro',
@@ -32,6 +38,15 @@ module.exports = {
         plugins: [
             'expo-router',
             'expo-font',
+            'expo-web-browser',
+            'expo-status-bar',
+            [
+                'expo-location',
+                {
+                    locationWhenInUsePermission:
+                        'Allow Drone Weather to use your location to show local flying conditions and forecasts.',
+                },
+            ],
             [
                 'expo-splash-screen',
                 {
@@ -46,9 +61,9 @@ module.exports = {
             typedRoutes: true,
         },
         extra: {
+            // Public client configuration only — never put secrets here.
             opencageApiKey: process.env.OPENCAGE_API_KEY,
-            airspaceApiKey: process.env.AIRSPACE_API_KEY,
-            googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY,
+            googleMyMapsId: '1BktWMPYNuh6N5_IPngyq8jW80nAWXI8d',
             eas: {
                 projectId: 'ec84979d-cb35-482c-9eec-aa21a0afc21a',
             },

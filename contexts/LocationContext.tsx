@@ -74,6 +74,8 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         setIsLocating(true)
         setErrorMsg(null)
 
+        let fallbackLocation: Location.LocationObject | null = null
+
         try {
             const { status } =
                 await Location.requestForegroundPermissionsAsync()
@@ -91,37 +93,70 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
                 return
             }
 
-            let fastLocation: Location.LocationObject | null = null
+            const servicesEnabled = await Location.hasServicesEnabledAsync()
+            if (!servicesEnabled) {
+                const persisted = await loadPersistedLocation()
+                if (persisted) {
+                    applyLocation(persisted)
+                    setErrorMsg(
+                        'Location services are off — showing last known location'
+                    )
+                } else {
+                    setErrorMsg(
+                        'Location services are off. Enable them or pick a location manually.'
+                    )
+                }
+                return
+            }
 
             if (!forceRefresh) {
                 const persisted = await loadPersistedLocation()
                 if (persisted) {
-                    fastLocation = persisted
+                    fallbackLocation = persisted
                     applyLocation(persisted)
                 }
 
-                if (!fastLocation) {
+                if (!fallbackLocation) {
                     const lastKnown = await Location.getLastKnownPositionAsync({
                         maxAge: 600_000,
                     })
                     if (lastKnown) {
-                        fastLocation = lastKnown
+                        fallbackLocation = lastKnown
                         applyLocation(lastKnown)
                     }
                 }
+            } else {
+                fallbackLocation = await loadPersistedLocation()
             }
 
-            if (fastLocation) {
+            if (fallbackLocation) {
                 setIsLocating(false)
             }
 
-            const currentLocation = await Location.getCurrentPositionAsync({
-                accuracy: Location.Accuracy.Balanced,
-            })
-            applyLocation(currentLocation)
+            try {
+                const currentLocation = await Location.getCurrentPositionAsync({
+                    accuracy: Location.Accuracy.Balanced,
+                })
+                applyLocation(currentLocation)
+            } catch {
+                if (fallbackLocation) {
+                    // Keep the fallback already shown; common on emulators with no GPS fix.
+                    return
+                }
+
+                const lastKnown = await Location.getLastKnownPositionAsync()
+                if (lastKnown) {
+                    applyLocation(lastKnown)
+                    return
+                }
+
+                setErrorMsg(
+                    'Current location is unavailable. Enable location services or pick a place manually.'
+                )
+            }
         } catch (error) {
             console.error('Error updating location:', error)
-            if (!location) {
+            if (!fallbackLocation) {
                 setErrorMsg('Failed to get location')
             }
         } finally {

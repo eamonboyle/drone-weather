@@ -1,5 +1,6 @@
 import { View, Text, Pressable, ActivityIndicator } from 'react-native'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
+import { Theme } from '@/constants/Theme'
 
 interface CurrentLocationCardProps {
     locationName: string
@@ -12,13 +13,25 @@ export function CurrentLocationCard({
     isLoading,
     onPress,
 }: CurrentLocationCardProps) {
+    const statusLabel = isLoading
+        ? 'Getting your location'
+        : locationName || 'Tap to use your phone location'
+
     return (
         <View className="px-4 pb-4">
             <Pressable
                 onPress={onPress}
                 disabled={isLoading}
+                accessibilityRole="button"
+                accessibilityLabel={`Use current location. ${statusLabel}`}
+                accessibilityHint="Uses GPS to set the weather location to where you are now"
+                accessibilityState={{ disabled: isLoading, busy: isLoading }}
                 className="rounded-2xl border border-amber-500/20 active:opacity-80 overflow-hidden"
-                style={{ backgroundColor: 'rgba(245, 158, 11, 0.08)' }}
+                style={{
+                    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                    minHeight: Theme.touchTarget,
+                    opacity: isLoading ? 0.7 : 1,
+                }}
             >
                 <View className="flex-row items-center p-4">
                     <View
@@ -26,12 +39,15 @@ export function CurrentLocationCard({
                         style={{ backgroundColor: 'rgba(245, 158, 11, 0.2)' }}
                     >
                         {isLoading ? (
-                            <ActivityIndicator size="small" color="#f59e0b" />
+                            <ActivityIndicator
+                                size="small"
+                                color={Theme.colors.accent}
+                            />
                         ) : (
                             <MaterialCommunityIcons
                                 name="crosshairs-gps"
                                 size={20}
-                                color="#f59e0b"
+                                color={Theme.colors.accent}
                             />
                         )}
                     </View>
@@ -47,16 +63,13 @@ export function CurrentLocationCard({
                             style={{ fontFamily: 'DMSans' }}
                             numberOfLines={2}
                         >
-                            {isLoading
-                                ? 'Getting your location...'
-                                : locationName ||
-                                  'Tap to use your phone location'}
+                            {statusLabel}
                         </Text>
                     </View>
                     <MaterialCommunityIcons
                         name="chevron-right"
                         size={24}
-                        color="#f59e0b"
+                        color={Theme.colors.accent}
                     />
                 </View>
             </Pressable>

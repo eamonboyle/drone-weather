@@ -59,11 +59,18 @@ export function DroneProfileSelector({
 
             <Pressable
                 onPress={() => setIsModalVisible(true)}
+                accessibilityRole="button"
+                accessibilityLabel={
+                    selectedProfile
+                        ? `Drone profile ${selectedProfile.name}. Tap to change.`
+                        : 'Select a drone profile'
+                }
                 className="rounded-xl p-4 flex-row items-center justify-between"
                 style={{
                     backgroundColor: 'rgba(22, 26, 32, 0.6)',
                     borderWidth: 1,
                     borderColor: 'rgba(255, 255, 255, 0.06)',
+                    minHeight: 44,
                 }}
             >
                 {selectedProfile ? (
@@ -123,7 +130,13 @@ export function DroneProfileSelector({
                             >
                                 Select Drone Profile
                             </Text>
-                            <Pressable onPress={handleClose} className="p-2">
+                            <Pressable
+                                onPress={handleClose}
+                                className="p-2"
+                                accessibilityRole="button"
+                                accessibilityLabel="Close drone profile selector"
+                                style={{ minHeight: 44, minWidth: 44, justifyContent: 'center' }}
+                            >
                                 <MaterialCommunityIcons
                                     name="close"
                                     size={22}
@@ -145,6 +158,7 @@ export function DroneProfileSelector({
                                 onChangeText={setSearchQuery}
                                 autoCapitalize="none"
                                 autoCorrect={false}
+                                accessibilityLabel="Search drone profiles"
                             />
                         </View>
 
@@ -164,8 +178,16 @@ export function DroneProfileSelector({
                                             onSelectProfile(profile)
                                             handleClose()
                                         }}
+                                        accessibilityRole="button"
+                                        accessibilityState={{
+                                            selected:
+                                                selectedProfile?.id ===
+                                                profile.id,
+                                        }}
+                                        accessibilityLabel={`${profile.name}, ${profile.manufacturer}, ${profile.releaseYear}`}
                                         className="rounded-xl p-4 mb-3 flex-row items-center"
                                         style={{
+                                            minHeight: 44,
                                             backgroundColor:
                                                 selectedProfile?.id ===
                                                 profile.id

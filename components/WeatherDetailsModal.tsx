@@ -9,17 +9,32 @@ import {
     StyleSheet,
 } from 'react-native'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
-import { format } from 'date-fns'
 import { HourlyWeatherData } from '@/types/weather'
+import {
+    formatLocationFullDate,
+    formatLocationTime,
+} from '@/utils/locationTime'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
 import { DroneFlyabilityService } from '@/services/droneFlyabilityService'
-import { convertSpeed, convertDistance } from '@/utils/unitConversion'
+import { convertSpeed } from '@/utils/unitConversion'
 import { API_WIND_UNIT } from '@/constants/weatherUnits'
+import {
+    checkStatusToBooleanSafe,
+    getCheckStatus,
+} from '@/utils/flyabilityChecks'
+import {
+    formatPercentDisplay,
+    formatTemperatureDisplay,
+    formatVisibilityDisplay,
+    formatWindDisplay,
+} from '@/utils/weatherDisplay'
+import { Theme } from '@/constants/Theme'
 
 interface WeatherDetailsModalProps {
     isVisible: boolean
     onClose: () => void
     hourData: HourlyWeatherData | null
+    utcOffsetSeconds?: number
 }
 
 interface DetailRowProps {
@@ -27,18 +42,49 @@ interface DetailRowProps {
     label: string
     value: string
     color?: string
-    isSafe?: boolean | 'warning'
-    subValues?: { label: string; value: string; isSafe?: boolean | 'warning' }[]
+    isSafe?: boolean | 'warning' | 'unavailable'
+    subValues?: {
+        label: string
+        value: string
+        isSafe?: boolean | 'warning' | 'unavailable'
+    }[]
 }
 
 function DetailRow({
     icon,
     label,
     value,
-    color = '#f59e0b',
+    color = Theme.colors.accent,
     isSafe,
     subValues,
 }: DetailRowProps) {
+    const statusIcon =
+        isSafe === 'warning' || isSafe === 'unavailable'
+            ? 'alert'
+            : isSafe
+              ? 'check-circle'
+              : isSafe === false
+                ? 'alert-circle'
+                : undefined
+
+    const statusColor =
+        isSafe === 'warning' || isSafe === 'unavailable'
+            ? Theme.colors.warning
+            : isSafe
+              ? Theme.colors.safe
+              : Theme.colors.danger
+
+    const statusLabel =
+        isSafe === true
+            ? 'Safe'
+            : isSafe === false
+              ? 'Unsafe'
+              : isSafe === 'unavailable'
+                ? 'Unavailable'
+                : isSafe === 'warning'
+                  ? 'Warning'
+                  : undefined
+
     return (
         <View className="py-3 border-b border-white/5">
             <View className="flex-row items-center justify-between">
@@ -51,6 +97,7 @@ function DetailRow({
                     <Text
                         className="text-slate-400 ml-3 text-base"
                         style={{ fontFamily: 'DMSans' }}
+                        accessibilityLabel={`${label}${statusLabel ? `, ${statusLabel}` : ''}`}
                     >
                         {label}
                     </Text>
@@ -62,24 +109,13 @@ function DetailRow({
                     >
                         {value}
                     </Text>
-                    {isSafe !== undefined && (
+                    {statusIcon && (
                         <MaterialCommunityIcons
-                            name={
-                                isSafe === 'warning'
-                                    ? 'alert'
-                                    : isSafe
-                                      ? 'check-circle'
-                                      : 'alert-circle'
-                            }
+                            name={statusIcon}
                             size={20}
-                            color={
-                                isSafe === 'warning'
-                                    ? '#f59e0b'
-                                    : isSafe
-                                      ? '#10b981'
-                                      : '#ef4444'
-                            }
+                            color={statusColor}
                             style={{ marginLeft: 8 }}
+                            accessibilityLabel={statusLabel}
                         />
                     )}
                 </View>
@@ -107,7 +143,8 @@ function DetailRow({
                                 {subValue.isSafe !== undefined && (
                                     <MaterialCommunityIcons
                                         name={
-                                            subValue.isSafe === 'warning'
+                                            subValue.isSafe === 'warning' ||
+                                            subValue.isSafe === 'unavailable'
                                                 ? 'alert'
                                                 : subValue.isSafe
                                                   ? 'check-circle'
@@ -115,11 +152,12 @@ function DetailRow({
                                         }
                                         size={16}
                                         color={
-                                            subValue.isSafe === 'warning'
-                                                ? '#f59e0b'
+                                            subValue.isSafe === 'warning' ||
+                                            subValue.isSafe === 'unavailable'
+                                                ? Theme.colors.warning
                                                 : subValue.isSafe
-                                                  ? '#10b981'
-                                                  : '#ef4444'
+                                                  ? Theme.colors.safe
+                                                  : Theme.colors.danger
                                         }
                                         style={{ marginLeft: 8 }}
                                     />
@@ -133,10 +171,18 @@ function DetailRow({
     )
 }
 
+function statusToRowSafe(
+    status: ReturnType<typeof getCheckStatus>
+): boolean | 'unavailable' {
+    if (status === 'unavailable') return 'unavailable'
+    return checkStatusToBooleanSafe(status)
+}
+
 export function WeatherDetailsModal({
     isVisible,
     onClose,
     hourData,
+    utcOffsetSeconds = 0,
 }: WeatherDetailsModalProps) {
     const { thresholds } = useWeatherConfig()
 
@@ -147,21 +193,13 @@ export function WeatherDetailsModal({
         thresholds
     )
 
-    // Convert and format temperature
-    const temperature =
-        thresholds.temperature.unit === 'fahrenheit'
-            ? ((hourData.temperature2m * 9) / 5 + 32).toFixed(1) + '°F'
-            : hourData.temperature2m.toFixed(1) + '°C'
-    const isTempSafe =
-        hourData.temperature2m >= thresholds.temperature.min &&
-        hourData.temperature2m <= thresholds.temperature.max
+    const temperature = formatTemperatureDisplay(
+        hourData.temperature2m,
+        thresholds.temperature.unit
+    )
 
-    const formatWindSpeed = (speedMph: number) => {
-        if (thresholds.windSpeed.unit === 'mph') {
-            return `${speedMph.toFixed(1)} mph`
-        }
-        return `${convertSpeed(speedMph, 'mph', 'kmh').toFixed(1)} km/h`
-    }
+    const formatWindSpeed = (speedMph: number | null) =>
+        formatWindDisplay(speedMph, thresholds.windSpeed.unit)
 
     const windInThresholdUnit = (speedMph: number) =>
         thresholds.windSpeed.unit === API_WIND_UNIT
@@ -173,38 +211,23 @@ export function WeatherDetailsModal({
             label: `At ${detail.height}`,
             value: formatWindSpeed(detail.speed),
             isSafe:
-                windInThresholdUnit(detail.speed) <= thresholds.windSpeed.max,
+                detail.speed === null
+                    ? ('unavailable' as const)
+                    : windInThresholdUnit(detail.speed) <=
+                      thresholds.windSpeed.max,
         })
     )
 
     const windSpeed = formatWindSpeed(hourData.windSpeed10m)
     const windGust = formatWindSpeed(hourData.windGusts10m)
-    const isWindSpeedSafe =
-        windInThresholdUnit(hourData.windSpeed10m) <= thresholds.windSpeed.max
-    const isWindGustSafe =
-        windInThresholdUnit(hourData.windGusts10m) <= thresholds.windGust.max
-
-    const visibilityKm = hourData.visibility / 1000
-    const minVisibilityKm =
-        thresholds.visibility.unit === 'miles'
-            ? convertDistance(
-                  thresholds.visibility.min,
-                  'miles',
-                  'kilometers'
-              )
-            : thresholds.visibility.min
-    const visibility =
-        thresholds.visibility.unit === 'miles'
-            ? `${convertDistance(visibilityKm, 'kilometers', 'miles').toFixed(1)} mi`
-            : `${visibilityKm.toFixed(1)} km`
-    const isVisibilitySafe = visibilityKm >= minVisibilityKm
-
-    // Format precipitation and cloud cover
-    const precipitation = `${hourData.precipitationProbability.toFixed(0)}%`
-    const cloudCover = `${hourData.cloudCover.toFixed(0)}%`
-    const isPrecipSafe =
-        hourData.precipitationProbability <=
-        thresholds.weather.maxPrecipitationProbability
+    const visibility = formatVisibilityDisplay(
+        hourData.visibility,
+        thresholds.visibility.unit
+    )
+    const precipitation = formatPercentDisplay(
+        hourData.precipitationProbability
+    )
+    const cloudCover = formatPercentDisplay(hourData.cloudCover)
 
     return (
         <Modal
@@ -212,124 +235,144 @@ export function WeatherDetailsModal({
             transparent
             animationType="fade"
             onRequestClose={onClose}
+            accessibilityViewIsModal
         >
             <Pressable
                 style={styles.backdrop}
                 onPress={onClose}
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss weather details"
             >
                 <Pressable
                     style={styles.modalCard}
                     onPress={(e) => e.stopPropagation()}
+                    accessibilityLabel="Weather details"
                 >
-                        {/* Header */}
-                        <View
-                            className="px-6 py-4 border-b"
+                    <View
+                        className="px-6 py-4 border-b"
+                        style={{
+                            backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                            borderBottomColor: 'rgba(245, 158, 11, 0.25)',
+                            borderBottomWidth: 1,
+                        }}
+                    >
+                        <Text
+                            className="text-slate-100 text-xl font-bold"
+                            style={{ fontFamily: 'Outfit-SemiBold' }}
+                        >
+                            {formatLocationFullDate(
+                                hourData.time,
+                                utcOffsetSeconds
+                            )}
+                        </Text>
+                        <Text
+                            className="text-slate-500 text-base mt-1"
+                            style={{ fontFamily: 'DMSans' }}
+                        >
+                            {formatLocationTime(hourData.time, utcOffsetSeconds, {
+                                hour12: true,
+                            })}
+                        </Text>
+                    </View>
+
+                    <ScrollView className="px-6 py-4">
+                        {flyabilityData.reasons.length > 0 && (
+                            <View
+                                className="mb-4 p-3 rounded-lg"
+                                style={{
+                                    backgroundColor: 'rgba(127, 29, 29, 0.35)',
+                                }}
+                                accessibilityRole="summary"
+                            >
+                                <Text
+                                    className="text-red-400 font-semibold mb-1"
+                                    style={{ fontFamily: 'Outfit-SemiBold' }}
+                                >
+                                    {flyabilityData.isSuitable
+                                        ? 'Notes:'
+                                        : 'Unsafe Conditions:'}
+                                </Text>
+                                {flyabilityData.reasons.map((reason, index) => (
+                                    <Text
+                                        key={index}
+                                        className="text-red-300"
+                                        style={{ fontFamily: 'DMSans' }}
+                                    >
+                                        • {reason}
+                                    </Text>
+                                ))}
+                            </View>
+                        )}
+                        <DetailRow
+                            icon="thermometer"
+                            label="Temperature"
+                            value={temperature}
+                            isSafe={statusToRowSafe(
+                                getCheckStatus(flyabilityData, 'temperature')
+                            )}
+                        />
+                        <DetailRow
+                            icon="weather-windy"
+                            label="Wind Speed"
+                            value={windSpeed}
+                            isSafe={statusToRowSafe(
+                                getCheckStatus(flyabilityData, 'windSpeed')
+                            )}
+                            subValues={windSpeedSubValues}
+                        />
+                        <DetailRow
+                            icon="weather-windy-variant"
+                            label="Wind Gusts"
+                            value={windGust}
+                            isSafe={statusToRowSafe(
+                                getCheckStatus(flyabilityData, 'windGust')
+                            )}
+                        />
+                        <DetailRow
+                            icon="eye"
+                            label="Visibility"
+                            value={visibility}
+                            isSafe={statusToRowSafe(
+                                getCheckStatus(flyabilityData, 'visibility')
+                            )}
+                        />
+                        <DetailRow
+                            icon="weather-pouring"
+                            label="Precipitation"
+                            value={precipitation}
+                            isSafe={statusToRowSafe(
+                                getCheckStatus(flyabilityData, 'precipitation')
+                            )}
+                        />
+                        <DetailRow
+                            icon="weather-cloudy"
+                            label="Cloud Cover"
+                            value={cloudCover}
+                        />
+                    </ScrollView>
+
+                    <View className="px-6 py-4 border-t border-white/5">
+                        <Pressable
+                            onPress={onClose}
+                            accessibilityRole="button"
+                            accessibilityLabel="Close weather details"
+                            className="py-3.5 rounded-xl items-center"
                             style={{
-                                backgroundColor: 'rgba(245, 158, 11, 0.08)',
-                                borderBottomColor: 'rgba(245, 158, 11, 0.25)',
-                                borderBottomWidth: 1,
+                                backgroundColor: 'rgba(245, 158, 11, 0.25)',
+                                borderWidth: 1,
+                                borderColor: 'rgba(245, 158, 11, 0.4)',
+                                minHeight: 44,
                             }}
                         >
                             <Text
-                                className="text-slate-100 text-xl font-bold"
+                                className="text-amber-300 text-base font-semibold"
                                 style={{ fontFamily: 'Outfit-SemiBold' }}
                             >
-                                {format(hourData.time, 'EEEE, MMMM d')}
+                                Close
                             </Text>
-                            <Text
-                                className="text-slate-500 text-base mt-1"
-                                style={{ fontFamily: 'DMSans' }}
-                            >
-                                {format(hourData.time, 'h:mm a')}
-                            </Text>
-                        </View>
-
-                        {/* Content */}
-                        <ScrollView className="px-6 py-4">
-                            {flyabilityData.reasons.length > 0 && (
-                                <View
-                                    className="mb-4 p-3 rounded-lg"
-                                    style={{
-                                        backgroundColor: 'rgba(127, 29, 29, 0.35)',
-                                    }}
-                                >
-                                    <Text
-                                        className="text-red-400 font-semibold mb-1"
-                                        style={{ fontFamily: 'Outfit-SemiBold' }}
-                                    >
-                                        Unsafe Conditions:
-                                    </Text>
-                                    {flyabilityData.reasons.map(
-                                        (reason, index) => (
-                                            <Text
-                                                key={index}
-                                                className="text-red-300"
-                                                style={{ fontFamily: 'DMSans' }}
-                                            >
-                                                • {reason}
-                                            </Text>
-                                        )
-                                    )}
-                                </View>
-                            )}
-                            <DetailRow
-                                icon="thermometer"
-                                label="Temperature"
-                                value={temperature}
-                                isSafe={isTempSafe}
-                            />
-                            <DetailRow
-                                icon="weather-windy"
-                                label="Wind Speed"
-                                value={windSpeed}
-                                isSafe={isWindSpeedSafe}
-                                subValues={windSpeedSubValues}
-                            />
-                            <DetailRow
-                                icon="weather-windy-variant"
-                                label="Wind Gusts"
-                                value={windGust}
-                                isSafe={isWindGustSafe}
-                            />
-                            <DetailRow
-                                icon="eye"
-                                label="Visibility"
-                                value={visibility}
-                                isSafe={isVisibilitySafe}
-                            />
-                            <DetailRow
-                                icon="weather-pouring"
-                                label="Precipitation"
-                                value={precipitation}
-                                isSafe={isPrecipSafe}
-                            />
-                            <DetailRow
-                                icon="weather-cloudy"
-                                label="Cloud Cover"
-                                value={cloudCover}
-                            />
-                        </ScrollView>
-
-                        {/* Close Button */}
-                        <View className="px-6 py-4 border-t border-white/5">
-                            <Pressable
-                                onPress={onClose}
-                                className="py-3.5 rounded-xl items-center"
-                                style={{
-                                    backgroundColor: 'rgba(245, 158, 11, 0.25)',
-                                    borderWidth: 1,
-                                    borderColor: 'rgba(245, 158, 11, 0.4)',
-                                }}
-                            >
-                                <Text
-                                    className="text-amber-300 text-base font-semibold"
-                                    style={{ fontFamily: 'Outfit-SemiBold' }}
-                                >
-                                    Close
-                                </Text>
-                            </Pressable>
-                        </View>
-                    </Pressable>
+                        </Pressable>
+                    </View>
+                </Pressable>
             </Pressable>
         </Modal>
     )
@@ -348,12 +391,12 @@ const styles = StyleSheet.create({
         maxWidth: 400,
         borderRadius: 20,
         overflow: 'hidden',
-        backgroundColor: '#1a1f28',
+        backgroundColor: Theme.colors.surfaceElevated,
         borderWidth: 2,
         borderColor: 'rgba(245, 158, 11, 0.6)',
         ...Platform.select({
             ios: {
-                shadowColor: '#f59e0b',
+                shadowColor: Theme.colors.accent,
                 shadowOffset: { width: 0, height: 0 },
                 shadowOpacity: 0.25,
                 shadowRadius: 24,

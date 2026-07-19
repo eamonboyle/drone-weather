@@ -59,6 +59,26 @@ function transformSearchResult(result: OpenCageResult): LocationSearchResult {
     }
 }
 
+function resultIdentity(result: LocationSearchResult): string {
+    const region = [result.city, result.country].filter(Boolean).join('|')
+    const coords = `${result.latitude.toFixed(4)},${result.longitude.toFixed(4)}`
+    return region ? `${region}@${coords}` : coords
+}
+
+function dedupeSearchResults(
+    results: LocationSearchResult[]
+): LocationSearchResult[] {
+    const seen = new Set<string>()
+    const deduped: LocationSearchResult[] = []
+    for (const result of results) {
+        const key = resultIdentity(result)
+        if (seen.has(key)) continue
+        seen.add(key)
+        deduped.push(result)
+    }
+    return deduped
+}
+
 // Main Service
 export class LocationSearchService {
     static async searchLocations(
@@ -73,7 +93,9 @@ export class LocationSearchService {
                 limit: CONFIG.SEARCH_LIMIT,
             })) as OpenCageResponse
 
-            return response.results.map(transformSearchResult)
+            return dedupeSearchResults(
+                response.results.map(transformSearchResult)
+            )
         } catch (error) {
             console.error('Error searching locations:', error)
             throw new Error('Failed to search locations')

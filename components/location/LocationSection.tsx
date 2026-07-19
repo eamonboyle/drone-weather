@@ -1,7 +1,9 @@
 import { View, Text } from 'react-native'
 import { LocationSearchResult } from '@/services/locationSearchService'
-import { StoredLocation } from '@/services/savedLocationsService'
-import { SavedLocationsService } from '@/services/savedLocationsService'
+import {
+    SavedLocationsService,
+    StoredLocation,
+} from '@/services/savedLocationsService'
 import { FlyabilityStatus } from '@/hooks/useLocationFlyability'
 import { LocationCard } from './LocationCard'
 

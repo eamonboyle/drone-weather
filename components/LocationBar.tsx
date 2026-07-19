@@ -42,14 +42,20 @@ export function LocationBar({ locationName }: LocationBarProps) {
         <View className="flex-row items-center justify-between px-4 py-3 border-b border-white/5 bg-background">
             <Pressable
                 onPress={handleSearchPress}
+                accessibilityRole="button"
+                accessibilityLabel="Search locations"
                 className="w-10 h-10 items-center justify-center rounded-lg active:bg-surface/50"
+                style={{ minHeight: 44, minWidth: 44 }}
             >
                 <Ionicons name="search" size={22} color="#f59e0b" />
             </Pressable>
 
             <Pressable
                 onPress={handleSearchPress}
+                accessibilityRole="button"
+                accessibilityLabel={`Location ${displayName}. Tap to search.`}
                 className="flex-1 items-center px-2 active:opacity-70"
+                style={{ minHeight: 44, justifyContent: 'center' }}
             >
                 <Text
                     className="text-slate-100 text-lg font-semibold text-center"
@@ -62,7 +68,10 @@ export function LocationBar({ locationName }: LocationBarProps) {
 
             <Pressable
                 onPress={handleLocationPress}
+                accessibilityRole="button"
+                accessibilityLabel="Use current GPS location"
                 className="w-10 h-10 items-center justify-center rounded-lg active:bg-surface/50"
+                style={{ minHeight: 44, minWidth: 44 }}
                 disabled={isLoading}
             >
                 {isLoading ? (

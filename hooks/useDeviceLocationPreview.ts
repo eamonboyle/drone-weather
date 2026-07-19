@@ -52,19 +52,25 @@ export function useDeviceLocationPreview(
                     if (!cancelled) setName(previewName)
                 }
 
-                const current = await Location.getCurrentPositionAsync({
-                    accuracy: Location.Accuracy.Balanced,
-                })
+                try {
+                    const current = await Location.getCurrentPositionAsync({
+                        accuracy: Location.Accuracy.Balanced,
+                    })
 
-                if (cancelled) return
+                    if (cancelled) return
 
-                const currentName = await reverseGeocodePlaceName(
-                    current.coords.latitude,
-                    current.coords.longitude
-                )
-                if (!cancelled) setName(currentName)
-            } catch (error) {
-                console.error('Error previewing device location:', error)
+                    const currentName = await reverseGeocodePlaceName(
+                        current.coords.latitude,
+                        current.coords.longitude
+                    )
+                    if (!cancelled) setName(currentName)
+                } catch {
+                    // Emulators often have no GPS fix; keep last-known preview if any.
+                    if (!cancelled && !lastKnown) {
+                        setName('Unable to detect location')
+                    }
+                }
+            } catch {
                 if (!cancelled) {
                     setName('Unable to detect location')
                 }

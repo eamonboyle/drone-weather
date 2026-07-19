@@ -1,4 +1,9 @@
-import { HourlyWeatherData } from '@/types/weather'
+import {
+    DroneFlightConditions,
+    FlyabilityCheck,
+    FlyabilityCheckStatus,
+    HourlyWeatherData,
+} from '@/types/weather'
 import { WeatherThresholds } from '@/types/weatherConfig'
 import {
     convertTemperature,
@@ -8,12 +13,7 @@ import {
 import { API_WIND_UNIT } from '@/constants/weatherUnits'
 import { addHours, isBefore, startOfHour } from 'date-fns'
 
-export interface DroneFlightConditions {
-    isSuitable: boolean
-    reasons: string[]
-    windSpeedDetails: { height: string; speed: number }[]
-    windGustDetails: { height: string; speed: number }[]
-}
+export type { DroneFlightConditions } from '@/types/weather'
 
 export interface SafeFlyingWindow {
     type: 'now' | 'upcoming' | 'none'
@@ -32,9 +32,8 @@ function toHourDate(time: Date | string): Date {
     return time instanceof Date ? time : new Date(time)
 }
 
-interface ConditionCheck {
-    isSafe: boolean
-    reason?: string
+function isMissing(value: number | null | undefined): boolean {
+    return value === null || value === undefined || Number.isNaN(value)
 }
 
 function normalizeApiWind(
@@ -45,11 +44,43 @@ function normalizeApiWind(
     return convertSpeed(windMph, 'mph', 'kmh')
 }
 
+function buildCheck(
+    factor: FlyabilityCheck['factor'],
+    status: FlyabilityCheckStatus,
+    value: number | null,
+    displayValue: string,
+    thresholdLabel: string,
+    explanation: string
+): FlyabilityCheck {
+    return {
+        factor,
+        status,
+        value,
+        displayValue,
+        thresholdLabel,
+        explanation,
+    }
+}
+
 function checkTemperature(
-    temperature: number,
+    temperature: number | null,
     thresholds: WeatherThresholds
-): ConditionCheck {
-    const minTemp =
+): FlyabilityCheck {
+    const unitLabel = thresholds.temperature.unit === 'fahrenheit' ? '°F' : '°C'
+    const thresholdLabel = `${thresholds.temperature.min}${unitLabel} – ${thresholds.temperature.max}${unitLabel}`
+
+    if (isMissing(temperature)) {
+        return buildCheck(
+            'temperature',
+            'unavailable',
+            null,
+            '—',
+            thresholdLabel,
+            'Temperature data is unavailable for this hour'
+        )
+    }
+
+    const minTempC =
         thresholds.temperature.unit === 'fahrenheit'
             ? convertTemperature(
                   thresholds.temperature.min,
@@ -57,7 +88,7 @@ function checkTemperature(
                   'celsius'
               )
             : thresholds.temperature.min
-    const maxTemp =
+    const maxTempC =
         thresholds.temperature.unit === 'fahrenheit'
             ? convertTemperature(
                   thresholds.temperature.max,
@@ -66,101 +97,181 @@ function checkTemperature(
               )
             : thresholds.temperature.max
 
-    const isSafe = temperature >= minTemp && temperature <= maxTemp
-    return {
-        isSafe,
-        reason: isSafe
-            ? undefined
-            : `Temperature (${temperature.toFixed(1)}°C) is outside safe range (${minTemp.toFixed(1)}°C - ${maxTemp.toFixed(1)}°C)`,
-    }
+    const displayTemp =
+        thresholds.temperature.unit === 'fahrenheit'
+            ? convertTemperature(temperature!, 'celsius', 'fahrenheit')
+            : temperature!
+
+    const isSafe = temperature! >= minTempC && temperature! <= maxTempC
+    const displayValue = `${displayTemp.toFixed(1)}${unitLabel}`
+
+    return buildCheck(
+        'temperature',
+        isSafe ? 'safe' : 'unsafe',
+        temperature!,
+        displayValue,
+        thresholdLabel,
+        isSafe
+            ? `Temperature (${displayValue}) is within safe range (${thresholdLabel})`
+            : `Temperature (${displayValue}) is outside safe range (${thresholdLabel})`
+    )
 }
 
 function checkWindSpeed(
-    windSpeedMph: number,
+    windSpeedMph: number | null,
     thresholds: WeatherThresholds
-): ConditionCheck {
+): FlyabilityCheck {
+    const unitLabel = thresholds.windSpeed.unit === 'mph' ? 'mph' : 'km/h'
+    const thresholdLabel = `≤ ${thresholds.windSpeed.max} ${unitLabel}`
+
+    if (isMissing(windSpeedMph)) {
+        return buildCheck(
+            'windSpeed',
+            'unavailable',
+            null,
+            '—',
+            thresholdLabel,
+            'Wind speed data is unavailable for this hour'
+        )
+    }
+
     const windInThresholdUnit = normalizeApiWind(
-        windSpeedMph,
+        windSpeedMph!,
         thresholds.windSpeed.unit
     )
-    const maxWindSpeed = thresholds.windSpeed.max
-    const unitLabel = thresholds.windSpeed.unit === 'mph' ? 'mph' : 'km/h'
+    const isSafe = windInThresholdUnit <= thresholds.windSpeed.max
+    const displayValue = `${windInThresholdUnit.toFixed(1)} ${unitLabel}`
 
-    const isSafe = windInThresholdUnit <= maxWindSpeed
-    return {
-        isSafe,
-        reason: isSafe
-            ? undefined
-            : `Wind speed (${windInThresholdUnit.toFixed(1)} ${unitLabel}) exceeds maximum (${maxWindSpeed} ${unitLabel})`,
-    }
+    return buildCheck(
+        'windSpeed',
+        isSafe ? 'safe' : 'unsafe',
+        windSpeedMph!,
+        displayValue,
+        thresholdLabel,
+        isSafe
+            ? `Wind speed (${displayValue}) is within limit (${thresholdLabel})`
+            : `Wind speed (${displayValue}) exceeds maximum (${thresholds.windSpeed.max} ${unitLabel})`
+    )
 }
 
 function checkWindGust(
-    windGustMph: number,
+    windGustMph: number | null,
     thresholds: WeatherThresholds
-): ConditionCheck {
+): FlyabilityCheck {
+    const unitLabel = thresholds.windSpeed.unit === 'mph' ? 'mph' : 'km/h'
+    const thresholdLabel = `≤ ${thresholds.windGust.max} ${unitLabel}`
+
+    if (isMissing(windGustMph)) {
+        return buildCheck(
+            'windGust',
+            'unavailable',
+            null,
+            '—',
+            thresholdLabel,
+            'Wind gust data is unavailable for this hour'
+        )
+    }
+
     const gustInThresholdUnit = normalizeApiWind(
-        windGustMph,
+        windGustMph!,
         thresholds.windSpeed.unit
     )
-    const maxGust = thresholds.windGust.max
-    const unitLabel = thresholds.windSpeed.unit === 'mph' ? 'mph' : 'km/h'
+    const isSafe = gustInThresholdUnit <= thresholds.windGust.max
+    const displayValue = `${gustInThresholdUnit.toFixed(1)} ${unitLabel}`
 
-    const isSafe = gustInThresholdUnit <= maxGust
-    return {
-        isSafe,
-        reason: isSafe
-            ? undefined
-            : `Wind gusts (${gustInThresholdUnit.toFixed(1)} ${unitLabel}) exceed maximum (${maxGust} ${unitLabel})`,
-    }
+    return buildCheck(
+        'windGust',
+        isSafe ? 'safe' : 'unsafe',
+        windGustMph!,
+        displayValue,
+        thresholdLabel,
+        isSafe
+            ? `Wind gusts (${displayValue}) are within limit (${thresholdLabel})`
+            : `Wind gusts (${displayValue}) exceed maximum (${thresholds.windGust.max} ${unitLabel})`
+    )
 }
 
 function checkVisibility(
-    visibilityMeters: number,
+    visibilityMeters: number | null,
     thresholds: WeatherThresholds
-): ConditionCheck {
-    const visibilityKm = visibilityMeters / 1000
+): FlyabilityCheck {
+    const unitLabel = thresholds.visibility.unit === 'miles' ? 'mi' : 'km'
+    const thresholdLabel = `≥ ${thresholds.visibility.min} ${unitLabel}`
+
+    if (isMissing(visibilityMeters)) {
+        return buildCheck(
+            'visibility',
+            'unavailable',
+            null,
+            '—',
+            thresholdLabel,
+            'Visibility data is unavailable for this hour'
+        )
+    }
+
+    const visibilityKm = visibilityMeters! / 1000
     const minVisibilityKm =
         thresholds.visibility.unit === 'miles'
             ? convertDistance(thresholds.visibility.min, 'miles', 'kilometers')
             : thresholds.visibility.min
 
-    const isSafe = visibilityKm >= minVisibilityKm
-    const unitLabel =
-        thresholds.visibility.unit === 'miles' ? 'mi' : 'km'
     const displayVisibility =
         thresholds.visibility.unit === 'miles'
             ? convertDistance(visibilityKm, 'kilometers', 'miles')
             : visibilityKm
 
-    return {
-        isSafe,
-        reason: isSafe
-            ? undefined
-            : `Visibility (${displayVisibility.toFixed(1)} ${unitLabel}) is below minimum (${thresholds.visibility.min} ${unitLabel})`,
-    }
+    const isSafe = visibilityKm >= minVisibilityKm
+    const displayValue = `${displayVisibility.toFixed(1)} ${unitLabel}`
+
+    return buildCheck(
+        'visibility',
+        isSafe ? 'safe' : 'unsafe',
+        visibilityMeters!,
+        displayValue,
+        thresholdLabel,
+        isSafe
+            ? `Visibility (${displayValue}) meets minimum (${thresholdLabel})`
+            : `Visibility (${displayValue}) is below minimum (${thresholds.visibility.min} ${unitLabel})`
+    )
 }
 
 function checkPrecipitation(
-    precipitationProbability: number,
+    precipitationProbability: number | null,
     thresholds: WeatherThresholds
-): ConditionCheck | null {
-    if (
-        precipitationProbability >
-        thresholds.weather.maxPrecipitationProbability
-    ) {
-        return {
-            isSafe: false,
-            reason: `Precipitation probability (${precipitationProbability.toFixed(0)}%) exceeds maximum (${thresholds.weather.maxPrecipitationProbability}%)`,
-        }
+): FlyabilityCheck {
+    const thresholdLabel = `≤ ${thresholds.weather.maxPrecipitationProbability}%`
+
+    if (isMissing(precipitationProbability)) {
+        return buildCheck(
+            'precipitation',
+            'unavailable',
+            null,
+            '—',
+            thresholdLabel,
+            'Precipitation probability is unavailable for this hour'
+        )
     }
 
-    return null
+    const isSafe =
+        precipitationProbability! <=
+        thresholds.weather.maxPrecipitationProbability
+    const displayValue = `${precipitationProbability!.toFixed(0)}%`
+
+    return buildCheck(
+        'precipitation',
+        isSafe ? 'safe' : 'unsafe',
+        precipitationProbability!,
+        displayValue,
+        thresholdLabel,
+        isSafe
+            ? `Precipitation probability (${displayValue}) is within limit (${thresholdLabel})`
+            : `Precipitation probability (${displayValue}) exceeds maximum (${thresholds.weather.maxPrecipitationProbability}%)`
+    )
 }
 
 function getWindDetails(hourData: HourlyWeatherData): {
-    speeds: { height: string; speed: number }[]
-    gusts: { height: string; speed: number }[]
+    speeds: { height: string; speed: number | null }[]
+    gusts: { height: string; speed: number | null }[]
 } {
     return {
         speeds: [
@@ -178,33 +289,24 @@ export class DroneFlyabilityService {
         hourData: HourlyWeatherData,
         thresholds: WeatherThresholds
     ): DroneFlightConditions {
-        const reasons: string[] = []
         const { speeds: windSpeedDetails, gusts: windGustDetails } =
             getWindDetails(hourData)
 
-        const checks: ConditionCheck[] = [
+        // Cloud cover is intentionally omitted — informational only (AGENTS.md).
+        const checks: FlyabilityCheck[] = [
             checkTemperature(hourData.temperature2m, thresholds),
             checkWindSpeed(hourData.windSpeed10m, thresholds),
             checkWindGust(hourData.windGusts10m, thresholds),
             checkVisibility(hourData.visibility, thresholds),
+            checkPrecipitation(hourData.precipitationProbability, thresholds),
         ]
 
-        const precipCheck = checkPrecipitation(
-            hourData.precipitationProbability,
-            thresholds
-        )
-        if (precipCheck) {
-            checks.push(precipCheck)
-        }
-
-        checks.forEach((check) => {
-            if (!check.isSafe && check.reason) {
-                reasons.push(check.reason)
-            }
-        })
+        const blocking = checks.filter((check) => check.status !== 'safe')
+        const reasons = blocking.map((check) => check.explanation)
 
         return {
-            isSuitable: reasons.length === 0,
+            isSuitable: blocking.length === 0,
+            checks,
             reasons,
             windSpeedDetails,
             windGustDetails,

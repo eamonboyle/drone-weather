@@ -1,35 +1,22 @@
 # Drone Weather App
 
-A mobile application built with React Native and Expo that helps drone pilots determine safe flying conditions based on weather data. The app provides real-time weather information and customizable safety thresholds for various weather parameters.
+A React Native (Expo) app that helps drone pilots decide whether conditions are safe to fly, using real-time weather and customizable safety thresholds.
 
 ## Features
 
-- Real-time weather data for your current location
+- Real-time weather for your current or saved location
 - Customizable safety thresholds for:
-    - Temperature
-    - Wind Speed and Gusts
-    - Cloud Cover
-    - Precipitation Probability
-- Visual indicators for safe/unsafe conditions
-- Hourly forecast view
-- Detailed table view for weekly forecast
-- Unit conversion support (metric/imperial)
-- Location-based weather updates
-- Beautiful, modern UI with dark theme
-
-## TODO:
-
-- [x] Create a refresh button that refreshes location & weather
-- [x] Make forecast header row / day sticky, so you can see when scrolling
-- [x] Fix Week view load times
-- [x] Allow user to change location (needs location search functionality)
-- [x] Select drone profiles for default settings such as Wind speed - need to research the data for this
-- [x] Fix bug with hour selector not functioning
-- [x] Fix weird behaviour with location search modal not selecting city when you click
-
-## Links
-- [Expo Build Reference - APK](https://docs.expo.dev/build-reference/apk/)
-- [OpenCage API - Geocoding](https://opencagedata.com/)
+  - Temperature
+  - Wind speed and gusts
+  - Precipitation probability
+  - Visibility
+- Cloud cover shown as **informational only** (never blocks GO/NO-GO)
+- Structured flyability checks shared across Home, Forecast, and details
+- Per-location weather cache (60-minute TTL)
+- Forecast hours labeled in the location’s timezone
+- Drone profiles, unit conversion (metric/imperial), and location search
+- UK airspace reference map (situational awareness only)
+- Dark aviation-inspired UI with accessibility labels on key controls
 
 ## Getting Started
 
@@ -47,36 +34,49 @@ A mobile application built with React Native and Expo that helps drone pilots de
 
 3. Run on your preferred platform:
 
-- Press 'a' for Android
-- Press 'i' for iOS
-- Scan QR code with Expo Go app on your device
+- Press `a` for Android
+- Press `i` for iOS
+- Scan the QR code with Expo Go
+
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `npm start` | Expo dev server |
+| `npm run test` | Jest in watch mode |
+| `npm run test:ci` | Jest once (CI) |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` | ESLint via Expo |
+| `npm run format` | Prettier |
 
 ## Technology Stack
 
-- React Native
-- Expo
-- TypeScript
-- TailwindCSS (NativeWind)
-- React Navigation
+- React Native / Expo / TypeScript
+- NativeWind (Tailwind)
 - Expo Router
-- date-fns for date formatting
-- React Native Reanimated for animations
+- Open-Meteo weather API
+- OpenCage geocoding
+- date-fns, Reanimated, Gesture Handler
 
 ## Configuration
 
-The app allows customization of weather thresholds through the settings screen:
+Safety thresholds (Settings):
 
-- Temperature range (°C/°F)
-- Maximum wind speed (km/h / mph)
-- Maximum wind gusts
-- Maximum cloud cover percentage
+- Temperature range (°C / °F) — values convert when you switch units
+- Maximum wind speed and gusts (km/h / mph)
 - Maximum precipitation probability
-- Minimum visibility
+- Minimum visibility (km / miles)
 
-## Contributing
+Cloud cover remains in profile metadata for reference but is **not** a safety slider and does not affect flyability.
 
-Feel free to submit issues and enhancement requests.
+`app.config.js` `extra` values are public client configuration (e.g. OpenCage key for the client). Do not store secrets there.
+
+## Quality gates
+
+CI (`.github/workflows/ci.yml`) runs `npm ci`, lint, typecheck, and Jest.
+
+Android Maestro smoke flows live under `maestro/` (Home, Forecast, Map, Settings).
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License.

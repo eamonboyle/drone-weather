@@ -1,38 +1,39 @@
 import { View, Text, Pressable } from 'react-native'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
-import { format, isToday, isTomorrow } from 'date-fns'
 import { SafeFlyingWindow } from '@/services/droneFlyabilityService'
+import {
+    formatLocationDayLabel,
+    formatLocationTimeRange,
+    getLocationHours,
+} from '@/utils/locationTime'
+import { Theme } from '@/constants/Theme'
 
 interface NextFlyWindowProps {
     window: SafeFlyingWindow
     onSelectWindow?: (startHour: number) => void
+    utcOffsetSeconds?: number
 }
 
-function formatDayLabel(date: Date): string {
-    if (isToday(date)) return 'Today'
-    if (isTomorrow(date)) return 'Tomorrow'
-    return format(date, 'EEE, MMM d')
-}
-
-function formatTimeRange(start: Date, end: Date): string {
-    return `${format(start, 'h a')} – ${format(end, 'h a')}`
-}
-
-export function NextFlyWindow({ window, onSelectWindow }: NextFlyWindowProps) {
+export function NextFlyWindow({
+    window,
+    onSelectWindow,
+    utcOffsetSeconds = 0,
+}: NextFlyWindowProps) {
     if (window.type === 'none') {
         return (
             <View
                 className="rounded-xl p-4 mb-4 flex-row items-center"
                 style={{
-                    backgroundColor: 'rgba(22, 26, 32, 0.6)',
+                    backgroundColor: Theme.colors.surfaceElevated,
                     borderWidth: 1,
-                    borderColor: 'rgba(255, 255, 255, 0.06)',
+                    borderColor: Theme.colors.border,
+                    opacity: 0.9,
                 }}
             >
                 <MaterialCommunityIcons
                     name="calendar-remove"
                     size={22}
-                    color="#64748b"
+                    color={Theme.colors.textMuted}
                 />
                 <Text
                     className="text-slate-400 text-sm ml-3 flex-1"
@@ -53,18 +54,23 @@ export function NextFlyWindow({ window, onSelectWindow }: NextFlyWindowProps) {
         <View
             className="rounded-xl p-4 mb-4 flex-row items-center"
             style={{
-                backgroundColor: 'rgba(22, 26, 32, 0.6)',
+                backgroundColor: Theme.colors.surfaceElevated,
                 borderWidth: 1,
                 borderColor:
                     window.type === 'now'
                         ? 'rgba(16, 185, 129, 0.3)'
                         : 'rgba(245, 158, 11, 0.3)',
+                opacity: 0.9,
             }}
         >
             <MaterialCommunityIcons
                 name={window.type === 'now' ? 'clock-check' : 'clock-outline'}
                 size={22}
-                color={window.type === 'now' ? '#10b981' : '#f59e0b'}
+                color={
+                    window.type === 'now'
+                        ? Theme.colors.safe
+                        : Theme.colors.warning
+                }
             />
             <View className="ml-3 flex-1">
                 <Text
@@ -81,14 +87,14 @@ export function NextFlyWindow({ window, onSelectWindow }: NextFlyWindowProps) {
                 >
                     {window.type === 'now'
                         ? `${durationHours} hr${durationHours === 1 ? '' : 's'} of flyable conditions ahead`
-                        : `${formatDayLabel(startTime)} · ${formatTimeRange(startTime, endTime)} (${durationHours} hr${durationHours === 1 ? '' : 's'})`}
+                        : `${formatLocationDayLabel(startTime, utcOffsetSeconds)} · ${formatLocationTimeRange(startTime, endTime, utcOffsetSeconds)} (${durationHours} hr${durationHours === 1 ? '' : 's'})`}
                 </Text>
             </View>
             {isPressable && (
                 <MaterialCommunityIcons
                     name="chevron-right"
                     size={20}
-                    color="#64748b"
+                    color={Theme.colors.textMuted}
                 />
             )}
         </View>
@@ -98,8 +104,13 @@ export function NextFlyWindow({ window, onSelectWindow }: NextFlyWindowProps) {
         return (
             <Pressable
                 onPress={() =>
-                    onSelectWindow?.(startTime.getHours())
+                    onSelectWindow?.(
+                        getLocationHours(startTime, utcOffsetSeconds)
+                    )
                 }
+                accessibilityRole="button"
+                accessibilityLabel={`Jump to next safe window starting ${formatLocationDayLabel(startTime, utcOffsetSeconds)}`}
+                style={{ minHeight: Theme.touchTarget }}
             >
                 {content}
             </Pressable>

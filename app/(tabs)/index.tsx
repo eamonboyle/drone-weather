@@ -6,72 +6,102 @@ import {
     KeyboardAvoidingView,
     Platform,
     Pressable,
+    RefreshControl,
+    ScrollView,
+    AccessibilityInfo,
 } from 'react-native'
-import { useEffect, useState, useRef, useMemo } from 'react'
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { DroneFlightConditions } from '@/types/weather'
-import { WeatherService } from '@/services/weatherService'
+import { useBottomTabBarHeight } from 'expo-router/js-tabs'
 import { LocationBar } from '@/components/LocationBar'
 import { WeatherGrid } from '@/components/WeatherGrid'
 import { HourSelector } from '@/components/HourSelector'
 import { useLocation } from '@/contexts/LocationContext'
-import { LinearGradient } from 'expo-linear-gradient'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useWeatherForLocation } from '@/hooks/useWeatherForLocation'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
+import { WeatherService } from '@/services/weatherService'
 import { DroneFlyabilityService } from '@/services/droneFlyabilityService'
 import { NextFlyWindow } from '@/components/NextFlyWindow'
+import {
+    getNowClockHour,
+    getWeatherUtcOffset,
+} from '@/utils/weatherHourUtils'
+import { Theme } from '@/constants/Theme'
+import { WEATHER_SOURCE_OPEN_METEO } from '@/types/weather'
+import { DataFreshnessBanner } from '@/components/ui/DataFreshnessBanner'
+import { EmptyState, StatusBanner } from '@/components/ui/StatusBanner'
 
 export default function Home() {
+    const tabBarHeight = useBottomTabBarHeight()
     const { locationName, errorMsg, isLocating } = useLocation()
-    const { weatherData, isBootstrapping, error, refetch } =
-        useWeatherForLocation()
+    const {
+        weatherData,
+        isBootstrapping,
+        isLoading,
+        error,
+        refetch,
+        lastUpdated,
+        isShowingCachedData,
+        isOfflineOrStale,
+    } = useWeatherForLocation()
     const { thresholds, selectedProfile } = useWeatherConfig()
-    const [selectedHour, setSelectedHour] = useState(0)
-    const [flightConditions, setFlightConditions] =
-        useState<DroneFlightConditions>({
-            isSuitable: false,
-            reasons: [],
-        })
+    const [selectedHour, setSelectedHour] = useState(() => getNowClockHour())
+    const [hasInitializedHour, setHasInitializedHour] = useState(false)
+    const [refreshing, setRefreshing] = useState(false)
+    const [reduceMotion, setReduceMotion] = useState(false)
 
     const fadeAnim = useRef(new Animated.Value(0)).current
     const translateY = useRef(new Animated.Value(20)).current
-    const scaleAnim = useRef(new Animated.Value(0.9)).current
+
+    useEffect(() => {
+        void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion)
+        const sub = AccessibilityInfo.addEventListener(
+            'reduceMotionChanged',
+            setReduceMotion
+        )
+        return () => sub.remove()
+    }, [])
 
     useEffect(() => {
         if (isBootstrapping) return
 
+        if (reduceMotion) {
+            fadeAnim.setValue(1)
+            translateY.setValue(0)
+            return
+        }
+
         Animated.parallel([
             Animated.timing(fadeAnim, {
                 toValue: 1,
-                duration: 500,
+                duration: 400,
                 useNativeDriver: true,
             }),
             Animated.timing(translateY, {
                 toValue: 0,
-                duration: 500,
-                useNativeDriver: true,
-            }),
-            Animated.timing(scaleAnim, {
-                toValue: 1,
-                duration: 500,
+                duration: 400,
                 useNativeDriver: true,
             }),
         ]).start()
-    }, [isBootstrapping, fadeAnim, scaleAnim, translateY])
+    }, [isBootstrapping, fadeAnim, translateY, reduceMotion])
 
-    useEffect(() => {
-        if (weatherData) {
-            const updateFlightConditions = async () => {
-                const conditions = await WeatherService.isDroneFlyable(
-                    weatherData,
-                    selectedHour
-                )
-                setFlightConditions(conditions)
+    const flightConditions = useMemo(() => {
+        if (!weatherData) {
+            return {
+                isSuitable: false,
+                checks: [],
+                reasons: [],
+                windSpeedDetails: [],
+                windGustDetails: [],
             }
-            updateFlightConditions()
         }
-    }, [weatherData, selectedHour])
+        return WeatherService.evaluateFlyability(
+            weatherData,
+            selectedHour,
+            thresholds
+        )
+    }, [weatherData, selectedHour, thresholds])
 
     const safeFlyingWindow = useMemo(() => {
         if (!weatherData) return { type: 'none' as const }
@@ -81,9 +111,30 @@ export default function Home() {
         )
     }, [weatherData, thresholds])
 
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true)
+        try {
+            await refetch()
+        } finally {
+            setRefreshing(false)
+        }
+    }, [refetch])
+
+    const lastUpdatedLabel = useMemo(() => {
+        const ts = lastUpdated ?? weatherData?.meta?.fetchedAt
+        if (!ts) return null
+        const ageMin = Math.max(0, Math.round((Date.now() - ts) / 60_000))
+        if (ageMin < 1) return 'Updated just now'
+        if (ageMin === 1) return 'Updated 1 min ago'
+        return `Updated ${ageMin} min ago`
+    }, [lastUpdated, weatherData?.meta?.fetchedAt])
+
+    const sourceLabel =
+        weatherData?.meta?.source ?? WEATHER_SOURCE_OPEN_METEO
+
     const renderLoadingState = () => (
         <View className="flex-1 justify-center items-center">
-            <ActivityIndicator size="large" color="#f59e0b" />
+            <ActivityIndicator size="large" color={Theme.colors.accent} />
             <Text
                 className="text-slate-300 text-lg mt-4"
                 style={{ fontFamily: 'DMSans-Medium' }}
@@ -98,99 +149,47 @@ export default function Home() {
     const renderErrorState = () => {
         const message = error ?? errorMsg ?? 'Unable to load weather data'
         return (
-            <View className="flex-1 justify-center items-center px-6">
-                <MaterialCommunityIcons
-                    name="cloud-alert"
-                    size={48}
-                    color="#f59e0b"
+            <EmptyState
+                message={message}
+                actionLabel="Retry"
+                onAction={() => void refetch()}
+            />
+        )
+    }
+
+    const renderMetaRow = () => (
+        <View className="flex-row items-center justify-between mb-3 px-1">
+            <View className="flex-1 mr-2">
+                <DataFreshnessBanner
+                    lastUpdatedLabel={lastUpdatedLabel}
+                    sourceLabel={sourceLabel}
+                    isShowingCachedData={isShowingCachedData}
+                    isOfflineOrStale={isOfflineOrStale}
                 />
-                <Text
-                    className="text-slate-300 text-base text-center mt-4"
-                    style={{ fontFamily: 'DMSans' }}
-                >
-                    {message}
-                </Text>
-                <Pressable
-                    onPress={() => refetch()}
-                    className="mt-4 px-6 py-3 rounded-xl bg-amber-500"
-                >
-                    <Text
-                        className="text-background font-semibold"
-                        style={{ fontFamily: 'Outfit-SemiBold' }}
-                    >
-                        Retry
-                    </Text>
-                </Pressable>
             </View>
-        )
-    }
-
-    const renderFlightStatus = () => {
-        const gradientColors = flightConditions.isSuitable
-            ? (['#065f46', '#047857'] as const)
-            : (['#7f1d1d', '#991b1b'] as const)
-
-        return (
-            <View className="mb-6">
-                <LinearGradient
-                    colors={gradientColors}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    className="p-5 rounded-2xl overflow-hidden"
-                    style={{
-                        borderWidth: 1,
-                        borderColor: 'rgba(255, 255, 255, 0.08)',
-                    }}
-                >
-                    <View className="flex-row items-center justify-center">
-                        <MaterialCommunityIcons
-                            name={
-                                flightConditions.isSuitable
-                                    ? 'airplane'
-                                    : 'airplane-off'
-                            }
-                            size={28}
-                            color="white"
-                            style={{ opacity: 0.95 }}
-                        />
-                        <Text
-                            className="text-xl text-white font-bold ml-3"
-                            style={{ fontFamily: 'Outfit-SemiBold' }}
-                        >
-                            {flightConditions.isSuitable
-                                ? 'Safe to Fly'
-                                : 'Not Safe to Fly'}
-                        </Text>
-                    </View>
-                    {flightConditions.reasons.length > 0 && (
-                        <View
-                            className="rounded-xl p-4 mt-3"
-                            style={{ backgroundColor: 'rgba(0, 0, 0, 0.25)' }}
-                        >
-                            {flightConditions.reasons.map((reason, index) => (
-                                <View
-                                    key={index}
-                                    className="flex-row items-center mb-2 last:mb-0"
-                                >
-                                    <MaterialCommunityIcons
-                                        name="alert-circle"
-                                        size={16}
-                                        color="rgba(255, 255, 255, 0.9)"
-                                    />
-                                    <Text
-                                        className="text-white/90 ml-2 flex-1 text-sm"
-                                        style={{ fontFamily: 'DMSans' }}
-                                    >
-                                        {reason}
-                                    </Text>
-                                </View>
-                            ))}
-                        </View>
-                    )}
-                </LinearGradient>
-            </View>
-        )
-    }
+            <Pressable
+                onPress={() => void onRefresh()}
+                accessibilityRole="button"
+                accessibilityLabel="Refresh weather"
+                hitSlop={8}
+                style={{
+                    minHeight: Theme.touchTarget,
+                    minWidth: Theme.touchTarget,
+                    justifyContent: 'center',
+                }}
+            >
+                <MaterialCommunityIcons
+                    name="refresh"
+                    size={22}
+                    color={
+                        isLoading
+                            ? Theme.colors.textMuted
+                            : Theme.colors.accent
+                    }
+                />
+            </Pressable>
+        </View>
+    )
 
     const renderProfileChip = () => {
         if (!selectedProfile) return null
@@ -198,15 +197,16 @@ export default function Home() {
             <View
                 className="flex-row items-center self-center mb-3 px-3 py-1.5 rounded-full"
                 style={{
-                    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                    backgroundColor: Theme.colors.accentDim,
                     borderWidth: 1,
                     borderColor: 'rgba(245, 158, 11, 0.25)',
                 }}
+                accessibilityLabel={`Active drone profile: ${selectedProfile.name}`}
             >
                 <MaterialCommunityIcons
                     name="quadcopter"
                     size={14}
-                    color="#f59e0b"
+                    color={Theme.colors.accent}
                 />
                 <Text
                     className="text-amber-400 text-xs ml-1.5"
@@ -218,11 +218,10 @@ export default function Home() {
         )
     }
 
-    const showError =
-        !isBootstrapping && (error || errorMsg) && !weatherData
+    const showError = !isBootstrapping && (error || errorMsg) && !weatherData
 
     return (
-        <SafeAreaView className="flex-1 bg-background">
+        <SafeAreaView className="flex-1 bg-background" edges={['top']}>
             <LocationBar locationName={locationName} />
 
             <KeyboardAvoidingView
@@ -230,52 +229,92 @@ export default function Home() {
                 style={{ flex: 1 }}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
             >
-                <View className="flex-1 px-4 pt-4">
-                    {isBootstrapping ? (
-                        renderLoadingState()
-                    ) : showError ? (
-                        renderErrorState()
-                    ) : weatherData ? (
-                        <Animated.View
+                {isBootstrapping ? (
+                    renderLoadingState()
+                ) : showError ? (
+                    renderErrorState()
+                ) : weatherData ? (
+                    <View style={{ flex: 1 }}>
+                        <ScrollView
+                            className="flex-1 px-4 pt-4"
+                            contentContainerStyle={{
+                                paddingBottom: Theme.spacing.lg,
+                            }}
+                            refreshControl={
+                                <RefreshControl
+                                    refreshing={refreshing}
+                                    onRefresh={onRefresh}
+                                    tintColor={Theme.colors.accent}
+                                    colors={[Theme.colors.accent]}
+                                />
+                            }
+                        >
+                            <Animated.View
+                                style={{
+                                    opacity: fadeAnim,
+                                    transform: [{ translateY }],
+                                }}
+                            >
+                                {renderMetaRow()}
+                                {error && isOfflineOrStale ? (
+                                    <Text
+                                        className="text-xs mb-2"
+                                        style={{
+                                            fontFamily: 'DMSans',
+                                            color: Theme.colors.danger,
+                                        }}
+                                        accessibilityRole="alert"
+                                    >
+                                        {error} Showing last available data.
+                                    </Text>
+                                ) : null}
+                                <StatusBanner
+                                    isSafe={flightConditions.isSuitable}
+                                    reasons={flightConditions.reasons}
+                                />
+                                {renderProfileChip()}
+                                <NextFlyWindow
+                                    window={safeFlyingWindow}
+                                    onSelectWindow={setSelectedHour}
+                                    utcOffsetSeconds={getWeatherUtcOffset(
+                                        weatherData
+                                    )}
+                                />
+                                <WeatherGrid
+                                    weatherData={weatherData}
+                                    selectedClockHour={selectedHour}
+                                />
+                            </Animated.View>
+                        </ScrollView>
+
+                        <View
                             style={{
-                                flex: 1,
-                                opacity: fadeAnim,
-                                transform: [{ translateY }],
+                                borderTopWidth: 1,
+                                borderTopColor: Theme.colors.border,
+                                backgroundColor: Theme.colors.background,
+                                // Measured tab bar height keeps padding honest if
+                                // chrome insets change; selector stays in layout flow.
+                                paddingBottom: Math.max(
+                                    Theme.spacing.sm,
+                                    tabBarHeight > 0 ? 0 : Theme.spacing.sm
+                                ),
                             }}
                         >
-                            {renderFlightStatus()}
-                            {renderProfileChip()}
-                            <NextFlyWindow
-                                window={safeFlyingWindow}
-                                onSelectWindow={setSelectedHour}
+                            <HourSelector
+                                selectedHour={selectedHour}
+                                onHourChange={setSelectedHour}
+                                hasInitialized={hasInitializedHour}
+                                onInitialized={() =>
+                                    setHasInitializedHour(true)
+                                }
+                                className="pt-2"
                             />
-                            <WeatherGrid
-                                weatherData={weatherData}
-                                selectedClockHour={selectedHour}
-                            />
-                        </Animated.View>
-                    ) : (
-                        renderErrorState()
-                    )}
-                </View>
+                        </View>
+                    </View>
+                ) : (
+                    renderErrorState()
+                )}
             </KeyboardAvoidingView>
-
-            {!showError && weatherData && (
-                <View className="absolute bottom-0 left-0 right-0 bg-background">
-                    <Animated.View
-                        style={{
-                            opacity: fadeAnim,
-                            transform: [{ translateY }],
-                        }}
-                    >
-                        <HourSelector
-                            selectedHour={selectedHour}
-                            onHourChange={setSelectedHour}
-                            className="mb-4"
-                        />
-                    </Animated.View>
-                </View>
-            )}
         </SafeAreaView>
     )
 }

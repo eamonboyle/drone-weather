@@ -2,6 +2,7 @@
     "extends": "expo/tsconfig.base",
     "compilerOptions": {
         "strict": true,
+        "types": ["jest"],
         "paths": {
             "@/*": ["./*"]
         }
@@ -10,6 +11,7 @@
         "**/*.ts",
         "**/*.tsx",
         "nativewind-env.d.ts",
+        "css-modules.d.ts",
         "babel.config.js",
         "tailwind.config.js",
         ".expo/types/**/*.ts",

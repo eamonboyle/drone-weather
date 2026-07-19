@@ -1,13 +1,23 @@
 import { View, Text, Pressable } from 'react-native'
-import { WeatherData } from '@/types/weather'
+import { WeatherData, DroneFlightConditions, FlyabilityFactor } from '@/types/weather'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
-import { useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import { WindDataPopup } from './WindDataPopup'
-import { WeatherService } from '@/services/weatherService'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
-import { findHourlyDataForClockHour } from '@/utils/weatherHourUtils'
-import { convertSpeed } from '@/utils/unitConversion'
-import { API_WIND_UNIT } from '@/constants/weatherUnits'
+import {
+    findHourlyDataForClockHour,
+    getWeatherUtcOffset,
+} from '@/utils/weatherHourUtils'
+import { DroneFlyabilityService } from '@/services/droneFlyabilityService'
+import { getCheckStatus } from '@/utils/flyabilityChecks'
+import {
+    formatNullable,
+    formatPercentDisplay,
+    formatTemperatureDisplay,
+    formatVisibilityDisplay,
+    formatWindDisplay,
+} from '@/utils/weatherDisplay'
+import { Theme } from '@/constants/Theme'
 
 interface WeatherGridProps {
     weatherData: WeatherData
@@ -16,10 +26,24 @@ interface WeatherGridProps {
 
 interface WindPopupState {
     isVisible: boolean
-    data: { height: string; speed: number }[]
+    data: { height: string; speed: number | null }[]
     title: string
     icon: keyof typeof MaterialCommunityIcons.glyphMap
     type: 'speed' | 'gusts'
+}
+
+type MetricSafety = 'safe' | 'unsafe' | 'unavailable' | 'neutral'
+
+const LABEL_TO_FACTOR: Record<string, FlyabilityFactor | null> = {
+    Temperature: 'temperature',
+    'Wind Speed': 'windSpeed',
+    'Wind Gusts': 'windGust',
+    Visibility: 'visibility',
+    'Rain Chance': 'precipitation',
+    'Cloud Cover': null,
+    'Wind Direction': null,
+    Precipitation: null,
+    Humidity: null,
 }
 
 export function WeatherGrid({ weatherData, selectedClockHour }: WeatherGridProps) {
@@ -31,28 +55,21 @@ export function WeatherGrid({ weatherData, selectedClockHour }: WeatherGridProps
         type: 'speed',
     })
     const { thresholds } = useWeatherConfig()
-    const [flyabilityData, setFlyabilityData] = useState<{
-        isSuitable: boolean
-        reasons: string[]
-        windSpeedDetails: { height: string; speed: number }[]
-        windGustDetails: { height: string; speed: number }[]
-    } | null>(null)
 
-    useEffect(() => {
-        loadFlyability()
-    }, [weatherData, selectedClockHour, thresholds])
+    const hourData = useMemo(
+        () =>
+            findHourlyDataForClockHour(
+                weatherData.hourlyData,
+                selectedClockHour,
+                { utcOffsetSeconds: getWeatherUtcOffset(weatherData) }
+            ),
+        [weatherData, selectedClockHour]
+    )
 
-    const loadFlyability = async () => {
-        try {
-            const flyability = await WeatherService.isDroneFlyable(
-                weatherData,
-                selectedClockHour
-            )
-            setFlyabilityData(flyability)
-        } catch (error) {
-            console.error('Error loading flyability:', error)
-        }
-    }
+    const flyabilityData: DroneFlightConditions | null = useMemo(() => {
+        if (!hourData || !thresholds) return null
+        return DroneFlyabilityService.checkFlyingConditions(hourData, thresholds)
+    }, [hourData, thresholds])
 
     const handleWindPress = (type: 'speed' | 'gusts') => {
         if (!flyabilityData) return
@@ -78,85 +95,27 @@ export function WeatherGrid({ weatherData, selectedClockHour }: WeatherGridProps
         })
     }
 
-    function windInThresholdUnit(speedMph: number): number {
-        if (thresholds.windSpeed.unit === API_WIND_UNIT) return speedMph
-        return convertSpeed(speedMph, 'mph', 'kmh')
+    function metricSafety(label: string): MetricSafety {
+        if (!flyabilityData) return 'unavailable'
+        const factor = LABEL_TO_FACTOR[label]
+        if (factor === null || factor === undefined) return 'neutral'
+        return getCheckStatus(flyabilityData, factor)
     }
 
-    function formatWind(speedMph: number): string {
-        if (thresholds.windSpeed.unit === 'mph') {
-            return `${speedMph.toFixed(1)} mph`
-        }
-        return `${convertSpeed(speedMph, 'mph', 'kmh').toFixed(1)} km/h`
-    }
-
-    // Helper function to determine if a specific weather parameter is within acceptable range
-    function isParameterSafe(
-        parameter: string,
-        value: number
-    ): 'safe' | 'warning' | 'unsafe' | 'neutral' {
-        if (!thresholds) return 'unsafe'
-
-        switch (parameter) {
-            case 'Wind Speed':
-                return windInThresholdUnit(value) <= thresholds.windSpeed.max
-                    ? 'safe'
-                    : 'unsafe'
-            case 'Wind Gusts':
-                return windInThresholdUnit(value) <= thresholds.windGust.max
-                    ? 'safe'
-                    : 'unsafe'
-            case 'Temperature':
-                return value >= thresholds.temperature.min &&
-                    value <= thresholds.temperature.max
-                    ? 'safe'
-                    : 'unsafe'
-            case 'Cloud Cover':
-                return 'neutral'
-            case 'Visibility':
-                return value >= thresholds.visibility.min * 1000
-                    ? 'safe'
-                    : 'unsafe'
-            case 'Rain Chance':
-                return value <= thresholds.weather.maxPrecipitationProbability
-                    ? 'safe'
-                    : 'unsafe'
-            case 'Precipitation Probability':
-                return value <= thresholds.weather.maxPrecipitationProbability
-                    ? 'safe'
-                    : 'unsafe'
-            default:
-                return 'safe'
-        }
-    }
-
-    if (!thresholds || !flyabilityData) {
+    if (!thresholds || !flyabilityData || !hourData) {
         return (
             <View className="flex-1 justify-center items-center">
                 <Text className="text-white text-lg">
-                    Loading weather data...
+                    {!hourData
+                        ? 'No weather data for selected hour'
+                        : 'Loading weather data...'}
                 </Text>
             </View>
         )
     }
 
-    const hourData = findHourlyDataForClockHour(
-        weatherData.hourlyData,
-        selectedClockHour
-    )
-
-    if (!hourData) {
-        return (
-            <View className="flex-1 justify-center items-center">
-                <Text className="text-white text-lg">
-                    No weather data for selected hour
-                </Text>
-            </View>
-        )
-    }
-
-    const getCardStyles = (safety: 'safe' | 'warning' | 'unsafe' | 'neutral') => {
-        if (safety === 'neutral') {
+    const getCardStyles = (safety: MetricSafety) => {
+        if (safety === 'neutral' || safety === 'unavailable') {
             return {
                 borderColor: 'rgba(255, 255, 255, 0.08)',
                 backgroundColor: 'rgba(22, 26, 32, 0.6)',
@@ -165,79 +124,78 @@ export function WeatherGrid({ weatherData, selectedClockHour }: WeatherGridProps
         const borderColor =
             safety === 'safe'
                 ? 'rgba(16, 185, 129, 0.35)'
-                : safety === 'warning'
-                  ? 'rgba(245, 158, 11, 0.35)'
-                  : 'rgba(239, 68, 68, 0.35)'
+                : 'rgba(239, 68, 68, 0.35)'
         const backgroundColor =
             safety === 'safe'
                 ? 'rgba(6, 95, 70, 0.4)'
-                : safety === 'warning'
-                  ? 'rgba(120, 53, 15, 0.35)'
-                  : 'rgba(127, 29, 29, 0.4)'
+                : 'rgba(127, 29, 29, 0.4)'
         return { borderColor, backgroundColor }
     }
 
     const weatherItems = [
         {
             label: 'Temperature',
-            value:
-                thresholds.temperature.unit === 'fahrenheit'
-                    ? `${((hourData.temperature2m * 9) / 5 + 32).toFixed(1)}°F`
-                    : `${hourData.temperature2m.toFixed(1)}°C`,
-            numericValue: hourData.temperature2m,
+            value: formatTemperatureDisplay(
+                hourData.temperature2m,
+                thresholds.temperature.unit
+            ),
             icon: 'thermometer',
         },
         {
             label: 'Wind Speed',
-            value: formatWind(hourData.windSpeed10m),
-            numericValue: hourData.windSpeed10m,
+            value: formatWindDisplay(
+                hourData.windSpeed10m,
+                thresholds.windSpeed.unit
+            ),
             icon: 'weather-windy',
             onPress: () => handleWindPress('speed'),
         },
         {
             label: 'Wind Gusts',
-            value: formatWind(hourData.windGusts10m),
-            numericValue: hourData.windGusts10m,
+            value: formatWindDisplay(
+                hourData.windGusts10m,
+                thresholds.windSpeed.unit
+            ),
             icon: 'weather-windy-variant',
             onPress: () => handleWindPress('gusts'),
         },
         {
             label: 'Wind Direction',
-            value: `${Number(hourData.windDirection10m).toFixed(2)}°`,
-            numericValue: hourData.windDirection10m,
+            value: formatNullable(
+                hourData.windDirection10m,
+                (n) => `${n.toFixed(0)}°`
+            ),
             icon: 'compass',
         },
         {
             label: 'Precipitation',
-            value: `${Number(hourData.precipitation).toFixed(2)} mm`,
-            numericValue: hourData.precipitation,
+            value: formatNullable(
+                hourData.precipitation,
+                (n) => `${n.toFixed(2)} mm`
+            ),
             icon: 'water',
         },
         {
             label: 'Cloud Cover',
-            value: `${hourData.cloudCover.toFixed(0)}%`,
-            numericValue: hourData.cloudCover,
+            value: formatPercentDisplay(hourData.cloudCover),
             icon: 'weather-cloudy',
         },
         {
             label: 'Visibility',
-            value:
-                thresholds.visibility.unit === 'miles'
-                    ? `${((hourData.visibility / 1000) * 0.621371).toFixed(1)} mi`
-                    : `${(hourData.visibility / 1000).toFixed(1)} km`,
-            numericValue: hourData.visibility,
+            value: formatVisibilityDisplay(
+                hourData.visibility,
+                thresholds.visibility.unit
+            ),
             icon: 'eye',
         },
         {
             label: 'Humidity',
-            value: `${Number(hourData.relativeHumidity2m).toFixed(0)}%`,
-            numericValue: hourData.relativeHumidity2m,
+            value: formatPercentDisplay(hourData.relativeHumidity2m),
             icon: 'water-percent',
         },
         {
             label: 'Rain Chance',
-            value: `${hourData.precipitationProbability.toFixed(0)}%`,
-            numericValue: hourData.precipitationProbability,
+            value: formatPercentDisplay(hourData.precipitationProbability),
             icon: 'weather-pouring',
         },
     ]
@@ -246,19 +204,23 @@ export function WeatherGrid({ weatherData, selectedClockHour }: WeatherGridProps
         <>
             <View className="flex-row flex-wrap gap-3">
                 {weatherItems.map((item) => {
-                    const safety = isParameterSafe(
-                        item.label,
-                        item.numericValue
-                    )
+                    const safety = metricSafety(item.label)
                     const cardStyles = getCardStyles(safety)
                     const iconColor =
-                        safety === 'neutral'
-                            ? '#94a3b8'
+                        safety === 'neutral' || safety === 'unavailable'
+                            ? Theme.colors.textSecondary
                             : safety === 'safe'
-                              ? '#10b981'
-                              : safety === 'warning'
-                                ? '#f59e0b'
-                                : '#ef4444'
+                              ? Theme.colors.safe
+                              : Theme.colors.danger
+
+                    const statusLabel =
+                        safety === 'safe'
+                            ? 'Safe'
+                            : safety === 'unsafe'
+                              ? 'Unsafe'
+                              : safety === 'unavailable'
+                                ? 'Unavailable'
+                                : 'Informational'
 
                     const handlePress = () => {
                         if (item.label === 'Wind Speed') {
@@ -272,16 +234,25 @@ export function WeatherGrid({ weatherData, selectedClockHour }: WeatherGridProps
                         <Pressable
                             key={item.label}
                             onPress={handlePress}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${item.label} ${item.value}, ${statusLabel}`}
+                            accessibilityHint={
+                                item.label === 'Wind Speed' ||
+                                item.label === 'Wind Gusts'
+                                    ? 'Shows altitude details'
+                                    : undefined
+                            }
                             className="p-4 flex-1 min-w-[30%] rounded-xl overflow-hidden"
                             style={{
                                 borderWidth: 1,
                                 borderColor: cardStyles.borderColor,
                                 backgroundColor: cardStyles.backgroundColor,
+                                minHeight: 44,
                             }}
                         >
                             <View className="items-center">
                                 <MaterialCommunityIcons
-                                    name={item.icon as any}
+                                    name={item.icon as keyof typeof MaterialCommunityIcons.glyphMap}
                                     size={22}
                                     color={iconColor}
                                 />
@@ -298,6 +269,17 @@ export function WeatherGrid({ weatherData, selectedClockHour }: WeatherGridProps
                             >
                                 {item.value}
                             </Text>
+                            {safety !== 'neutral' && (
+                                <Text
+                                    className="text-[10px] mt-1 text-center"
+                                    style={{
+                                        fontFamily: 'DMSans',
+                                        color: iconColor,
+                                    }}
+                                >
+                                    {statusLabel}
+                                </Text>
+                            )}
                         </Pressable>
                     )
                 })}

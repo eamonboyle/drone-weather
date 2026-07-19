@@ -1,17 +1,15 @@
 import {
-    buildForecastPlanningSummary,
     filterHoursByFlyability,
-    findBestDay,
-} from '../forecastPlanning'
+    buildForecastPlanningSummary,
+} from '@/utils/forecastPlanning'
 import { HourlyWeatherData } from '@/types/weather'
 import { DEFAULT_WEATHER_THRESHOLDS } from '@/types/weatherConfig'
 
-function createHour(
-    time: string,
+function createHourData(
     overrides: Partial<HourlyWeatherData> = {}
 ): HourlyWeatherData {
     return {
-        time: new Date(time),
+        time: new Date('2026-05-24T12:00:00Z'),
         temperature2m: 20,
         relativeHumidity2m: 50,
         dewPoint2m: 10,
@@ -48,46 +46,57 @@ function createHour(
 }
 
 describe('forecastPlanning', () => {
-    const dayOneHours = [
-        createHour('2026-05-24T14:00:00'),
-        createHour('2026-05-24T15:00:00', { windSpeed10m: 30 }),
-    ]
-    const dayTwoHours = [
-        createHour('2026-05-25T10:00:00'),
-        createHour('2026-05-25T11:00:00'),
-        createHour('2026-05-25T12:00:00'),
-    ]
-    const days: [string, HourlyWeatherData[]][] = [
-        ['2026-05-24', dayOneHours],
-        ['2026-05-25', dayTwoHours],
-    ]
+    it('filters flyable hours without using cloud cover', () => {
+        const hours = [
+            createHourData({
+                time: new Date('2026-05-24T14:00:00Z'),
+                cloudCover: 100,
+            }),
+            createHourData({
+                time: new Date('2026-05-24T15:00:00Z'),
+                windSpeed10m: 40,
+            }),
+        ]
 
-    it('filters flyable hours only', () => {
         const filtered = filterHoursByFlyability(
-            dayOneHours,
+            hours,
             DEFAULT_WEATHER_THRESHOLDS,
             'flyable'
         )
 
         expect(filtered).toHaveLength(1)
-        expect(filtered[0].time.getHours()).toBe(14)
+        expect(filtered[0].time.toISOString()).toBe('2026-05-24T14:00:00.000Z')
     })
 
-    it('finds the day with the most flyable hours', () => {
-        const bestDay = findBestDay(days, DEFAULT_WEATHER_THRESHOLDS)
+    it('builds a planning summary with a best day', () => {
+        const dayA = new Date(Date.now() + 2 * 60 * 60 * 1000)
+        const dayABad = new Date(Date.now() + 3 * 60 * 60 * 1000)
+        const dayB = new Date(Date.now() + 26 * 60 * 60 * 1000)
+        const dayB2 = new Date(Date.now() + 27 * 60 * 60 * 1000)
 
-        expect(bestDay?.date).toBe('2026-05-25')
-        expect(bestDay?.safeCount).toBe(3)
-    })
+        const hourly = [
+            createHourData({ time: dayA }),
+            createHourData({
+                time: dayABad,
+                windSpeed10m: 40,
+            }),
+            createHourData({ time: dayB }),
+            createHourData({ time: dayB2 }),
+        ]
+        const dateA = dayA.toISOString().slice(0, 10)
+        const dateB = dayB.toISOString().slice(0, 10)
+        const days: [string, HourlyWeatherData[]][] = [
+            [dateA, hourly.slice(0, 2)],
+            [dateB, hourly.slice(2)],
+        ]
 
-    it('builds a planning summary with next window and best day', () => {
         const summary = buildForecastPlanningSummary(
-            [...dayOneHours, ...dayTwoHours],
+            hourly,
             days,
             DEFAULT_WEATHER_THRESHOLDS
         )
 
-        expect(summary.bestDay?.date).toBe('2026-05-25')
-        expect(['now', 'upcoming', 'none']).toContain(summary.nextWindow.type)
+        expect(summary.bestDay?.date).toBe(dateB)
+        expect(summary.nextWindow.type).not.toBe('none')
     })
 })

@@ -191,23 +191,37 @@ export class WeatherConfigService {
     }> {
         const errors: string[] = []
 
-        // Validate temperature
+        // Validate temperature — min must be strictly below max
         if (thresholds.temperature) {
-            if (thresholds.temperature.min > thresholds.temperature.max) {
+            if (thresholds.temperature.min >= thresholds.temperature.max) {
                 errors.push(
-                    'Minimum temperature cannot be greater than maximum temperature'
+                    'Minimum temperature must be less than maximum temperature'
                 )
             }
         }
 
-        // Validate wind speed
-        if (thresholds.windSpeed?.max && thresholds.windSpeed.max < 0) {
-            errors.push('Wind speed maximum must be positive')
+        // Validate wind speed (zero is allowed)
+        if (
+            typeof thresholds.windSpeed?.max === 'number' &&
+            thresholds.windSpeed.max < 0
+        ) {
+            errors.push('Wind speed maximum cannot be negative')
         }
 
-        // Validate visibility
-        if (thresholds.visibility?.min && thresholds.visibility.min < 0) {
-            errors.push('Visibility minimum must be positive')
+        // Validate wind gust (zero is allowed)
+        if (
+            typeof thresholds.windGust?.max === 'number' &&
+            thresholds.windGust.max < 0
+        ) {
+            errors.push('Wind gust maximum cannot be negative')
+        }
+
+        // Validate visibility (zero is allowed)
+        if (
+            typeof thresholds.visibility?.min === 'number' &&
+            thresholds.visibility.min < 0
+        ) {
+            errors.push('Visibility minimum cannot be negative')
         }
 
         // Validate weather conditions

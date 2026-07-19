@@ -1,11 +1,27 @@
-import React, { useRef, useEffect, useMemo } from 'react'
-import { View, Text, ScrollView, Pressable, Dimensions } from 'react-native'
+import React, { useRef, useEffect, useMemo, useState } from 'react'
+import {
+    View,
+    Text,
+    ScrollView,
+    Pressable,
+    useWindowDimensions,
+    AccessibilityInfo,
+} from 'react-native'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { DroneFlyabilityService } from '@/services/droneFlyabilityService'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
 import { useWeatherData } from '@/contexts/WeatherDataContext'
 import { HourlyWeatherData } from '@/types/weather'
-import { getTodayHourlyData } from '@/utils/weatherHourUtils'
+import {
+    getNowClockHour,
+    getTodayHourlyData,
+    getWeatherUtcOffset,
+} from '@/utils/weatherHourUtils'
+import {
+    getLocationHours,
+    isSameLocationDay,
+} from '@/utils/locationTime'
+import { Theme } from '@/constants/Theme'
 
 interface SafetyBarProps {
     weatherData: HourlyWeatherData[]
@@ -21,20 +37,26 @@ function SafetyBar({ weatherData }: SafetyBarProps) {
         )
 
         return {
-            hour: new Date(hourData.time).getHours(),
             timestamp: hourData.time,
             isSafe: conditions.isSuitable,
         }
     })
 
     return (
-        <View className="h-1.5 flex-1 flex-row rounded-full overflow-hidden">
-            {safetyData.map(({ hour, timestamp, isSafe }) => (
+        <View
+            className="h-1.5 flex-1 flex-row rounded-full overflow-hidden"
+            accessibilityRole="progressbar"
+            accessibilityLabel={`Hourly safety overview, ${safetyData.filter((h) => h.isSafe).length} of ${safetyData.length} hours flyable`}
+        >
+            {safetyData.map(({ timestamp, isSafe }) => (
                 <View
                     key={timestamp.toString()}
-                    className={`flex-1 ${
-                        isSafe ? 'bg-green-500' : 'bg-red-500'
-                    }`}
+                    className="flex-1"
+                    style={{
+                        backgroundColor: isSafe
+                            ? Theme.colors.safe
+                            : Theme.colors.danger,
+                    }}
                 />
             ))}
         </View>
@@ -45,24 +67,38 @@ interface HourSelectorProps {
     selectedHour: number
     onHourChange: (hour: number) => void
     className?: string
+    hasInitialized?: boolean
+    onInitialized?: () => void
 }
 
 export function HourSelector({
     selectedHour,
     onHourChange,
     className = '',
+    hasInitialized = false,
+    onInitialized,
 }: HourSelectorProps) {
     const hours = Array.from({ length: 24 }, (_, i) => i)
-    const windowWidth = Dimensions.get('window').width
-    const itemWidth = 60 // Width of each hour item
+    const { width: windowWidth } = useWindowDimensions()
+    const itemWidth = 60
     const scrollViewRef = useRef<ScrollView>(null)
     const { thresholds } = useWeatherConfig()
     const { weatherData } = useWeatherData()
+    const [currentHour, setCurrentHour] = useState(() =>
+        getNowClockHour(weatherData)
+    )
 
-    const getCurrentHour = () => new Date().getHours()
-    const currentHour = useMemo(() => getCurrentHour(), []) // Memoize current hour
+    const utcOffsetSeconds = getWeatherUtcOffset(weatherData)
 
-    // Calculate safety data for all hours
+    // Refresh "Now" when the location-local hour rolls over
+    useEffect(() => {
+        setCurrentHour(getNowClockHour(weatherData))
+        const id = setInterval(() => {
+            setCurrentHour(getNowClockHour(weatherData))
+        }, 30_000)
+        return () => clearInterval(id)
+    }, [weatherData])
+
     const hourlyFlyability = useMemo(() => {
         if (!weatherData) return []
 
@@ -73,36 +109,39 @@ export function HourSelector({
             )
 
             return {
-                hour: new Date(hourData.time).getHours(),
+                hour: getLocationHours(hourData.time, utcOffsetSeconds),
                 timestamp: hourData.time,
                 isSafe: conditions.isSuitable,
             }
         })
-    }, [weatherData, thresholds])
+    }, [weatherData, thresholds, utcOffsetSeconds])
 
-    // Set initial hour when component mounts
+    // Initialize once to current/upcoming location hour — midnight (0) is valid
     useEffect(() => {
-        if (selectedHour === 0 && weatherData) {
-            // Find the first available hour in today's data
-            const today = new Date()
-            today.setHours(0, 0, 0, 0)
+        if (hasInitialized || !weatherData) return
 
-            const availableHour = weatherData.hourlyData.find(
-                (data) =>
-                    new Date(data.time).toDateString() ===
-                        today.toDateString() &&
-                    new Date(data.time).getHours() >= currentHour
-            )
+        const now = new Date()
+        const availableHour = weatherData.hourlyData.find(
+            (data) =>
+                isSameLocationDay(data.time, now, utcOffsetSeconds) &&
+                getLocationHours(data.time, utcOffsetSeconds) >= currentHour
+        )
 
-            if (availableHour) {
-                onHourChange(new Date(availableHour.time).getHours())
-            } else {
-                onHourChange(currentHour)
-            }
+        if (availableHour) {
+            onHourChange(getLocationHours(availableHour.time, utcOffsetSeconds))
+        } else {
+            onHourChange(currentHour)
         }
-    }, [selectedHour, weatherData, currentHour, onHourChange])
+        onInitialized?.()
+    }, [
+        hasInitialized,
+        weatherData,
+        currentHour,
+        onHourChange,
+        onInitialized,
+        utcOffsetSeconds,
+    ])
 
-    // Handle scrolling whenever selectedHour changes
     useEffect(() => {
         if (scrollViewRef.current) {
             scrollViewRef.current.scrollTo({
@@ -114,6 +153,9 @@ export function HourSelector({
 
     const handleCurrentHourPress = () => {
         onHourChange(currentHour)
+        void AccessibilityInfo.announceForAccessibility(
+            `Selected current hour, ${currentHour}H`
+        )
     }
 
     const getHourStyle = (hour: number) => {
@@ -122,25 +164,29 @@ export function HourSelector({
             return {
                 container: 'bg-amber-500',
                 text: 'text-background',
+                status: 'selected' as const,
             }
         }
         if (hourData?.isSafe) {
             return {
                 container: 'bg-transparent',
                 text: 'text-emerald-400',
+                status: 'safe' as const,
             }
         }
         return {
             container: 'bg-transparent',
             text: 'text-red-400',
+            status: 'unsafe' as const,
         }
     }
 
     if (!weatherData) return null
 
-    // Get the date for today to match with weather data
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const now = new Date()
+    const todayHours = getTodayHourlyData(weatherData.hourlyData, {
+        utcOffsetSeconds,
+    })
 
     return (
         <View className={`px-4 ${className}`}>
@@ -153,7 +199,10 @@ export function HourSelector({
                 </Text>
                 <Pressable
                     onPress={handleCurrentHourPress}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Jump to current hour, ${currentHour}H`}
                     className="ml-4 flex-row items-center bg-amber-500 px-3 py-1.5 rounded-full"
+                    style={{ minHeight: 44, minWidth: 44 }}
                 >
                     <MaterialCommunityIcons
                         name="clock"
@@ -169,9 +218,7 @@ export function HourSelector({
                 </Pressable>
             </View>
             <View className="mb-3">
-                <SafetyBar
-                    weatherData={getTodayHourlyData(weatherData.hourlyData)}
-                />
+                <SafetyBar weatherData={todayHours} />
             </View>
             <View className="relative">
                 <ScrollView
@@ -181,36 +228,73 @@ export function HourSelector({
                     contentContainerStyle={{
                         paddingHorizontal: windowWidth / 2 - itemWidth / 2,
                     }}
+                    accessibilityRole="adjustable"
+                    accessibilityLabel="Hour selector"
                 >
                     {hours.map((hour) => {
                         const style = getHourStyle(hour)
-                        // Find the matching weather data for this hour
                         const hourWeatherData = weatherData.hourlyData.find(
                             (data) =>
-                                new Date(data.time).getHours() === hour &&
-                                new Date(data.time).toDateString() ===
-                                    today.toDateString()
+                                getLocationHours(data.time, utcOffsetSeconds) ===
+                                    hour &&
+                                isSameLocationDay(
+                                    data.time,
+                                    now,
+                                    utcOffsetSeconds
+                                )
                         )
                         const uniqueKey = hourWeatherData
                             ? hourWeatherData.time.toString()
                             : `hour-${hour}`
+                        const statusWord =
+                            style.status === 'selected'
+                                ? 'selected'
+                                : style.status === 'safe'
+                                  ? 'safe to fly'
+                                  : 'not safe to fly'
 
                         return (
                             <Pressable
                                 key={uniqueKey}
                                 onPress={() => onHourChange(hour)}
+                                accessibilityRole="button"
+                                accessibilityState={{
+                                    selected: selectedHour === hour,
+                                }}
+                                accessibilityLabel={`${hour}H, ${statusWord}`}
                                 className="w-[60px] items-center py-2"
+                                style={{ minHeight: 44 }}
                             >
                                 <View
                                     className={`w-9 h-9 rounded-full items-center justify-center ${style.container}`}
                                 >
                                     <Text
                                         className={`text-sm font-semibold ${style.text}`}
-                                        style={{ fontFamily: 'Outfit-SemiBold' }}
+                                        style={{
+                                            fontFamily: 'Outfit-SemiBold',
+                                        }}
                                     >
                                         {hour}H
                                     </Text>
                                 </View>
+                                <Text
+                                    className="text-[10px] mt-1"
+                                    style={{
+                                        fontFamily: 'DMSans',
+                                        color:
+                                            style.status === 'selected'
+                                                ? Theme.colors.accent
+                                                : style.status === 'safe'
+                                                  ? Theme.colors.safe
+                                                  : Theme.colors.danger,
+                                    }}
+                                >
+                                    {style.status === 'selected'
+                                        ? 'Sel'
+                                        : style.status === 'safe'
+                                          ? 'Safe'
+                                          : 'Unsafe'}
+                                </Text>
                             </Pressable>
                         )
                     })}

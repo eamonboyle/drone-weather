@@ -1,43 +1,50 @@
 /**
- * Drone Weather - Aviation-inspired design theme
- * Industrial/utilitarian meets refined. Dark cockpit aesthetic with amber accents.
+ * Drone Weather — semantic design tokens
+ * Black / teal / amber aviation identity. Prefer these over hard-coded hex.
  */
 
 export const Theme = {
     colors: {
-        // Core backgrounds - near-black aviation depth
         background: '#08090c',
         surface: '#0f1115',
         surfaceElevated: '#161a20',
         surfaceOverlay: '#1c2128',
 
-        // Borders - subtle, refined
         border: 'rgba(255, 255, 255, 0.06)',
         borderMuted: 'rgba(255, 255, 255, 0.04)',
 
-        // Primary accent - warm amber (aviation dial glow)
         accent: '#f59e0b',
         accentMuted: 'rgba(245, 158, 11, 0.6)',
         accentDim: 'rgba(245, 158, 11, 0.2)',
 
-        // Text hierarchy
         text: '#f8fafc',
         textSecondary: '#94a3b8',
         textMuted: '#64748b',
         textInverse: '#08090c',
 
-        // Status - refined, not garish
         safe: '#10b981',
         safeMuted: 'rgba(16, 185, 129, 0.25)',
+        safeSurface: 'rgba(6, 95, 70, 0.4)',
         warning: '#f59e0b',
         warningMuted: 'rgba(245, 158, 11, 0.25)',
         danger: '#ef4444',
         dangerMuted: 'rgba(239, 68, 68, 0.25)',
+        dangerSurface: 'rgba(127, 29, 29, 0.4)',
 
-        // Tab bar
+        /** Neutral weather (e.g. cloud cover) — never go/no-go */
+        weatherNeutral: '#94a3b8',
+        weatherNeutralSurface: 'rgba(22, 26, 32, 0.6)',
+
         tabBar: '#0a0b0e',
         tabActive: '#f59e0b',
         tabInactive: '#64748b',
+    },
+
+    elevation: {
+        none: 0,
+        low: 2,
+        medium: 8,
+        high: 16,
     },
 
     typography: {
@@ -72,4 +79,6 @@ export const Theme = {
         xl: 20,
         full: 9999,
     },
+
+    touchTarget: 44,
 } as const

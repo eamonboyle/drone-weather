@@ -1,0 +1,18 @@
+appId: com.eamonsdiary.droneweather
+---
+- launchApp
+- tapOn: "Forecast"
+- assertVisible: "Forecast"
+- assertVisible: "All"
+- assertVisible: "Flyable"
+- assertVisible: "Blocked"
+- assertVisible: "Cards"
+- assertVisible: "Table"
+- tapOn: "Table"
+- assertVisible: "Temp"
+- assertVisible: "Wind"
+- assertVisible: "Cloud"
+- assertVisible: "Rain"
+- tapOn: "Cards"
+- tapOn: "Flyable"
+- assertVisible: "Flyable"
