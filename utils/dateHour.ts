@@ -10,6 +10,9 @@ export function isBefore(date: Date, dateToCompare: Date): boolean {
     return date.getTime() < dateToCompare.getTime()
 }
 
+/** Calendar-hour add (date-fns compatible) so DST transitions stay correct. */
 export function addHours(date: Date, amount: number): Date {
-    return new Date(date.getTime() + amount * 3_600_000)
+    const next = new Date(date.getTime())
+    next.setHours(next.getHours() + amount)
+    return next
 }

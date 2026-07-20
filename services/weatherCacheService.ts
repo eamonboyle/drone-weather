@@ -102,14 +102,16 @@ async function removeLegacyCache(): Promise<void> {
 function findEntryForCoords(
     store: WeatherCacheStoreV2,
     latitude: number,
-    longitude: number
+    longitude: number,
+    entries?: CachedWeatherEntry[]
 ): CachedWeatherEntry | null {
     const exact = store.entries[coordKey(latitude, longitude)]
     if (exact && isLocationMatch(exact, { latitude, longitude })) {
         return exact
     }
 
-    for (const entry of Object.values(store.entries)) {
+    const scan = entries ?? Object.values(store.entries)
+    for (const entry of scan) {
         if (isLocationMatch(entry, { latitude, longitude })) {
             return entry
         }
@@ -158,7 +160,8 @@ export class WeatherCacheService {
 
     /**
      * One AsyncStorage read for many coordinates. Map keys use the same
-     * rounded coord key as single-location lookups (`lat.toFixed(3),lng`).
+     * rounded coord key as single-location lookups
+     * (`${lat.toFixed(3)},${lng.toFixed(3)}`).
      */
     static async getCachedWeatherBatch(
         locations: { latitude: number; longitude: number }[]
@@ -168,11 +171,17 @@ export class WeatherCacheService {
 
         try {
             const store = await readStore()
+            const entries = Object.values(store.entries)
             for (const { latitude, longitude } of locations) {
                 const key = coordKey(latitude, longitude)
                 if (result.has(key)) continue
 
-                const entry = findEntryForCoords(store, latitude, longitude)
+                const entry = findEntryForCoords(
+                    store,
+                    latitude,
+                    longitude,
+                    entries
+                )
                 if (entry && !isCacheExpired(entry.timestamp)) {
                     result.set(key, reviveWeatherData(entry.data))
                 }
