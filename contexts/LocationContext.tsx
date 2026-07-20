@@ -9,6 +9,7 @@ import React, {
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Location from 'expo-location'
 import { sharedDeviceLocationService } from '@/services/deviceLocationService'
+import { getHasCompletedOnboarding } from '@/services/onboardingService'
 
 const LAST_LOCATION_KEY = 'last_known_location'
 
@@ -306,7 +307,26 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     }, [acquireDeviceLocation, deviceLocation, isDeviceLocating])
 
     useEffect(() => {
-        void updateLocation()
+        let cancelled = false
+
+        async function bootstrap() {
+            const hasCompletedOnboarding = await getHasCompletedOnboarding()
+            if (cancelled) return
+
+            // Defer the system permission prompt until onboarding's Location step
+            // (or a later launch after onboarding is complete).
+            if (!hasCompletedOnboarding) {
+                setIsLocating(false)
+                return
+            }
+
+            await updateLocation()
+        }
+
+        void bootstrap()
+        return () => {
+            cancelled = true
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap once
     }, [])
 

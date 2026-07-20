@@ -12,3 +12,9 @@ export function lightImpactHaptic(): void {
     if (Platform.OS !== 'ios') return
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
 }
+
+/** Success notification for completing a meaningful flow. */
+export function successHaptic(): void {
+    if (Platform.OS !== 'ios') return
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+}

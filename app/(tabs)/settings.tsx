@@ -25,6 +25,7 @@ import {
     thresholdsMatch,
 } from '@/contexts/WeatherConfigContext'
 import { useLocation } from '@/contexts/LocationContext'
+import { useOnboarding } from '@/contexts/OnboardingContext'
 import { SettingsSlider } from '@/components/SettingsSlider'
 import { DroneProfile } from '@/types/droneProfiles'
 import { convertThresholdsOnUnitChange } from '@/utils/unitConversion'
@@ -52,6 +53,7 @@ export default function SettingsScreen() {
         thresholds: contextThresholds,
     } = useWeatherConfig()
     const { locationName, location } = useLocation()
+    const { resetOnboarding } = useOnboarding()
     contextThresholdsRef.current = contextThresholds
 
     const loadThresholds = useCallback(async () => {
@@ -278,6 +280,31 @@ export default function SettingsScreen() {
         )
     }
 
+    const handleReplayOnboarding = () => {
+        Alert.alert(
+            'Replay onboarding',
+            'Show the welcome setup again on the next screen?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Replay',
+                    onPress: async () => {
+                        try {
+                            await clearSelectedProfile()
+                            await resetOnboarding()
+                        } catch (error) {
+                            console.error('Error resetting onboarding:', error)
+                            Alert.alert(
+                                'Error',
+                                'Failed to reset onboarding'
+                            )
+                        }
+                    },
+                },
+            ]
+        )
+    }
+
     if (isLoading) {
         return (
             <SafeAreaView className="flex-1 bg-background" edges={['top']}>
@@ -491,6 +518,23 @@ export default function SettingsScreen() {
                             style={{ fontFamily: 'Outfit-SemiBold' }}
                         >
                             Clear weather cache
+                        </Text>
+                    </Pressable>
+                    <Pressable
+                        onPress={handleReplayOnboarding}
+                        accessibilityRole="button"
+                        accessibilityLabel="Replay onboarding"
+                        className="mt-3 py-3 rounded-xl items-center"
+                        style={{
+                            backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                            minHeight: 44,
+                        }}
+                    >
+                        <Text
+                            className="text-amber-300 font-semibold"
+                            style={{ fontFamily: 'Outfit-SemiBold' }}
+                        >
+                            Replay onboarding
                         </Text>
                     </Pressable>
                 </View>
