@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useRef } from 'react'
 import { View, Text, Pressable } from 'react-native'
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import Slider from '@react-native-community/slider'
@@ -36,6 +36,33 @@ export function SettingsSlider({
     sublabel,
 }: SettingsSliderProps) {
     const accessibilityValue = `${value}${unit ? ` ${unit}` : ''}`
+    const range = maximumValue - minimumValue
+    // Keep the native UISlider on a stable 0...1 scale. iOS applies changed
+    // props one at a time, so updating its value and range together can briefly
+    // clamp the converted value to the old range and visibly jump.
+    const sliderValue =
+        range > 0
+            ? Math.max(0, Math.min(1, (value - minimumValue) / range))
+            : 0
+    const sliderStep = range > 0 && step > 0 ? step / range : 0
+    const toDomainValue = (position: number) => {
+        const raw = minimumValue + Math.max(0, Math.min(1, position)) * range
+        const stepped =
+            step > 0
+                ? minimumValue +
+                  Math.round((raw - minimumValue) / step) * step
+                : raw
+        const decimalPlaces = step.toString().split('.')[1]?.length ?? 0
+
+        return Number(
+            Math.max(minimumValue, Math.min(maximumValue, stepped)).toFixed(
+                decimalPlaces
+            )
+        )
+    }
+    // Native Slider can emit onValueChange on mount / prop updates. Only treat
+    // changes as user input while a gesture is active.
+    const isSlidingRef = useRef(false)
 
     return (
         <View
@@ -44,7 +71,6 @@ export function SettingsSlider({
                 backgroundColor: Theme.colors.surfaceElevated,
                 borderWidth: 1,
                 borderColor: Theme.colors.border,
-                opacity: 0.9,
             }}
             accessible={false}
         >
@@ -116,12 +142,21 @@ export function SettingsSlider({
             <View className="flex-row items-center ml-9">
                 <View className="flex-1">
                     <Slider
-                        minimumValue={minimumValue}
-                        maximumValue={maximumValue}
-                        step={step}
-                        value={value}
-                        onValueChange={onValueChange}
-                        onSlidingComplete={onSlidingComplete}
+                        minimumValue={0}
+                        maximumValue={1}
+                        step={sliderStep}
+                        value={sliderValue}
+                        onSlidingStart={() => {
+                            isSlidingRef.current = true
+                        }}
+                        onValueChange={(next) => {
+                            if (!isSlidingRef.current) return
+                            onValueChange(toDomainValue(next))
+                        }}
+                        onSlidingComplete={(next) => {
+                            isSlidingRef.current = false
+                            onSlidingComplete?.(toDomainValue(next))
+                        }}
                         minimumTrackTintColor={Theme.colors.accent}
                         maximumTrackTintColor="#334155"
                         thumbTintColor={Theme.colors.accent}
