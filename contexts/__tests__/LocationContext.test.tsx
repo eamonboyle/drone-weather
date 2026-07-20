@@ -3,6 +3,7 @@ import renderer, { act, ReactTestRenderer } from 'react-test-renderer'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Location from 'expo-location'
 import { sharedDeviceLocationService } from '@/services/deviceLocationService'
+import { getHasCompletedOnboarding } from '@/services/onboardingService'
 import { LocationProvider, useLocation } from '@/contexts/LocationContext'
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
@@ -22,6 +23,10 @@ jest.mock('@/services/deviceLocationService', () => ({
         acquireFirstFix: jest.fn(),
         reverseGeocodeCached: jest.fn(),
     },
+}))
+
+jest.mock('@/services/onboardingService', () => ({
+    getHasCompletedOnboarding: jest.fn(() => Promise.resolve(true)),
 }))
 
 function makeLocation(
@@ -91,6 +96,8 @@ describe('LocationContext', () => {
     const mockLastKnown = Location.getLastKnownPositionAsync as jest.Mock
     const mockGetItem = AsyncStorage.getItem as jest.Mock
     const mockSetItem = AsyncStorage.setItem as jest.Mock
+    const mockGetHasCompletedOnboarding =
+        getHasCompletedOnboarding as jest.Mock
 
     let latest: ProbeApi | null
     let tree: ReactTestRenderer
@@ -100,6 +107,7 @@ describe('LocationContext', () => {
         jest.clearAllMocks()
         mockGetItem.mockResolvedValue(null)
         mockSetItem.mockResolvedValue(undefined)
+        mockGetHasCompletedOnboarding.mockResolvedValue(true)
         mockRequestPermissions.mockResolvedValue({ status: 'granted' })
         mockHasServices.mockResolvedValue(true)
         mockLastKnown.mockResolvedValue(null)
@@ -254,5 +262,19 @@ describe('LocationContext', () => {
         expect(mockReverseGeocodeCached).toHaveBeenCalledWith(53.35, -6.26)
         expect(latest!.locationName).toBe('Dublin')
         expect(latest!.deviceLocationName).toBe('Dublin')
+    })
+
+    it('defers permission bootstrap until onboarding is complete', async () => {
+        mockGetHasCompletedOnboarding.mockResolvedValue(false)
+
+        await mountProvider()
+        await act(async () => {
+            await Promise.resolve()
+            await Promise.resolve()
+        })
+
+        expect(mockRequestPermissions).not.toHaveBeenCalled()
+        expect(mockAcquireFirstFix).not.toHaveBeenCalled()
+        expect(latest!.isLocating).toBe(false)
     })
 })
