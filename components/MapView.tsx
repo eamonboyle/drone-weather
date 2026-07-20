@@ -106,10 +106,12 @@ export function DroneMapView() {
     }, [mapUrl, reloadKey, beginLoad, clearLoadTimeout])
 
     // Tear down Google Maps document before native WebView destroy.
+    // Capture the instance in the effect body (not cleanup) so exhaustive-deps
+    // is satisfied; reloadKey/mapUrl/loadState re-run this when WebView remounts.
     useEffect(() => {
+        const webView = webViewRef.current
         return () => {
             clearLoadTimeout()
-            const webView = webViewRef.current
             if (!webView) return
             try {
                 webView.stopLoading()
@@ -120,7 +122,7 @@ export function DroneMapView() {
                 // Best-effort; unmount still proceeds.
             }
         }
-    }, [clearLoadTimeout])
+    }, [clearLoadTimeout, reloadKey, mapUrl, loadState])
 
     const handleRetry = () => {
         setReloadKey((k) => k + 1)
