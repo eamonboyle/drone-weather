@@ -100,12 +100,13 @@ export default function OnboardingScreen() {
     }, [completeOnboarding, isFinishing])
 
     const stepId: StepId = STEPS[stepIndex]
-    const locationStatus =
-        didRequestLocation && locationName
+    const locationStatus = !didRequestLocation
+        ? null
+        : errorMsg
+          ? 'Location unavailable — you can pick a place anytime from Home.'
+          : locationName
             ? `Using ${locationName}`
-            : didRequestLocation && errorMsg
-              ? 'Location unavailable — you can pick a place anytime from Home.'
-              : null
+            : null
 
     const entering = FadeIn.duration(reduceMotion ? 120 : 220)
     const exiting = FadeOut.duration(reduceMotion ? 80 : 160)
