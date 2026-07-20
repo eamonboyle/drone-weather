@@ -231,6 +231,15 @@ export function WeatherDetailsModal({
     const cloudCover = formatPercentDisplay(hourData.cloudCover)
 
     const isIosSheet = Platform.OS === 'ios'
+    const Root = isIosSheet ? View : Pressable
+    const rootProps = isIosSheet
+        ? { style: styles.sheetRoot }
+        : {
+              style: styles.backdrop,
+              onPress: onClose,
+              accessibilityRole: 'button' as const,
+              accessibilityLabel: 'Dismiss weather details',
+          }
 
     return (
         <Modal
@@ -241,14 +250,7 @@ export function WeatherDetailsModal({
             onRequestClose={onClose}
             accessibilityViewIsModal
         >
-            <Pressable
-                style={isIosSheet ? styles.sheetRoot : styles.backdrop}
-                onPress={isIosSheet ? undefined : onClose}
-                accessibilityRole={isIosSheet ? undefined : 'button'}
-                accessibilityLabel={
-                    isIosSheet ? undefined : 'Dismiss weather details'
-                }
-            >
+            <Root {...rootProps}>
                 <Pressable
                     style={isIosSheet ? styles.sheetCard : styles.modalCard}
                     onPress={(e) => e.stopPropagation()}
@@ -379,7 +381,7 @@ export function WeatherDetailsModal({
                         </Pressable>
                     </View>
                 </Pressable>
-            </Pressable>
+            </Root>
         </Modal>
     )
 }
