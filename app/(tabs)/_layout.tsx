@@ -1,8 +1,24 @@
 import { Tabs } from 'expo-router'
-import { Platform } from 'react-native'
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
+import { Platform, StyleSheet } from 'react-native'
+import Ionicons from '@expo/vector-icons/Ionicons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { Theme } from '@/constants/Theme'
+import { selectionHaptic } from '@/utils/haptics'
 import '@/styles/globals.css'
+
+const tabBarStyle = Platform.select({
+    ios: {
+        // Near-black chrome with a hairline — reads as instrument bezel, not Material card.
+        backgroundColor: 'rgba(8, 9, 12, 0.97)',
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: 'rgba(255, 255, 255, 0.12)',
+    },
+    default: {
+        backgroundColor: Theme.colors.tabBar,
+        borderTopWidth: 1,
+        borderTopColor: Theme.colors.border,
+    },
+})
 
 export default function TabLayout() {
     return (
@@ -12,11 +28,7 @@ export default function TabLayout() {
                     backgroundColor: Theme.colors.background,
                 },
                 headerTintColor: Theme.colors.text,
-                tabBarStyle: {
-                    backgroundColor: Theme.colors.tabBar,
-                    borderTopWidth: 1,
-                    borderTopColor: Theme.colors.border,
-                },
+                tabBarStyle,
                 tabBarActiveTintColor: Theme.colors.tabActive,
                 tabBarInactiveTintColor: Theme.colors.tabInactive,
                 tabBarLabelStyle: {
@@ -24,6 +36,11 @@ export default function TabLayout() {
                     fontSize: 11,
                 },
                 tabBarHideOnKeyboard: Platform.OS === 'android',
+            }}
+            screenListeners={{
+                tabPress: () => {
+                    selectionHaptic()
+                },
             }}
         >
             <Tabs.Screen
@@ -48,6 +65,9 @@ export default function TabLayout() {
                         />
                     ),
                     headerShown: false,
+                    // Allow blur cleanup to unmount the Google WebView; freeze
+                    // would keep the native WebView process alive off-tab.
+                    freezeOnBlur: false,
                 }}
             />
             <Tabs.Screen

@@ -1,5 +1,5 @@
 import { View, Text, Pressable } from 'react-native'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { SafeFlyingWindow } from '@/services/droneFlyabilityService'
 import {
     formatLocationDayLabel,

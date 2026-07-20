@@ -8,7 +8,7 @@ import {
     Platform,
     StyleSheet,
 } from 'react-native'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { HourlyWeatherData } from '@/types/weather'
 import {
     formatLocationFullDate,
@@ -186,7 +186,8 @@ export function WeatherDetailsModal({
 }: WeatherDetailsModalProps) {
     const { thresholds } = useWeatherConfig()
 
-    if (!hourData) return null
+    // Skip flyability work while hidden (modal must not recalculate in background).
+    if (!isVisible || !hourData) return null
 
     const flyabilityData = DroneFlyabilityService.checkFlyingConditions(
         hourData,
@@ -229,22 +230,29 @@ export function WeatherDetailsModal({
     )
     const cloudCover = formatPercentDisplay(hourData.cloudCover)
 
+    const isIosSheet = Platform.OS === 'ios'
+    const Root = isIosSheet ? View : Pressable
+    const rootProps = isIosSheet
+        ? { style: styles.sheetRoot }
+        : {
+              style: styles.backdrop,
+              onPress: onClose,
+              accessibilityRole: 'button' as const,
+              accessibilityLabel: 'Dismiss weather details',
+          }
+
     return (
         <Modal
             visible={isVisible}
-            transparent
-            animationType="fade"
+            transparent={!isIosSheet}
+            animationType={isIosSheet ? 'slide' : 'fade'}
+            presentationStyle={isIosSheet ? 'pageSheet' : 'overFullScreen'}
             onRequestClose={onClose}
             accessibilityViewIsModal
         >
-            <Pressable
-                style={styles.backdrop}
-                onPress={onClose}
-                accessibilityRole="button"
-                accessibilityLabel="Dismiss weather details"
-            >
+            <Root {...rootProps}>
                 <Pressable
-                    style={styles.modalCard}
+                    style={isIosSheet ? styles.sheetCard : styles.modalCard}
                     onPress={(e) => e.stopPropagation()}
                     accessibilityLabel="Weather details"
                 >
@@ -373,7 +381,7 @@ export function WeatherDetailsModal({
                         </Pressable>
                     </View>
                 </Pressable>
-            </Pressable>
+            </Root>
         </Modal>
     )
 }
@@ -386,6 +394,14 @@ const styles = StyleSheet.create({
         padding: 20,
         backgroundColor: 'rgba(0, 0, 0, 0.8)',
     },
+    sheetRoot: {
+        flex: 1,
+        backgroundColor: Theme.colors.surfaceElevated,
+    },
+    sheetCard: {
+        flex: 1,
+        backgroundColor: Theme.colors.surfaceElevated,
+    },
     modalCard: {
         width: '100%',
         maxWidth: 400,
@@ -396,10 +412,10 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(245, 158, 11, 0.6)',
         ...Platform.select({
             ios: {
-                shadowColor: Theme.colors.accent,
-                shadowOffset: { width: 0, height: 0 },
-                shadowOpacity: 0.25,
-                shadowRadius: 24,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.35,
+                shadowRadius: 16,
             },
             android: {
                 elevation: 24,

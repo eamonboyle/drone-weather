@@ -10,14 +10,15 @@ import {
     ScrollView,
     AccessibilityInfo,
 } from 'react-native'
-import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useBottomTabBarHeight } from 'expo-router/js-tabs'
 import { LocationBar } from '@/components/LocationBar'
 import { WeatherGrid } from '@/components/WeatherGrid'
 import { HourSelector } from '@/components/HourSelector'
 import { useLocation } from '@/contexts/LocationContext'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
+import { useFocusAwareFreshnessLabel } from '@/hooks/useFocusAwareFreshnessLabel'
 import { useWeatherForLocation } from '@/hooks/useWeatherForLocation'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
 import { WeatherService } from '@/services/weatherService'
@@ -51,8 +52,12 @@ export default function Home() {
     const [refreshing, setRefreshing] = useState(false)
     const [reduceMotion, setReduceMotion] = useState(false)
 
-    const fadeAnim = useRef(new Animated.Value(0)).current
-    const translateY = useRef(new Animated.Value(20)).current
+    const handleHourInitialized = useCallback(() => {
+        setHasInitializedHour(true)
+    }, [])
+
+    const [fadeAnim] = useState(() => new Animated.Value(0))
+    const [translateY] = useState(() => new Animated.Value(20))
 
     useEffect(() => {
         void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion)
@@ -120,14 +125,9 @@ export default function Home() {
         }
     }, [refetch])
 
-    const lastUpdatedLabel = useMemo(() => {
-        const ts = lastUpdated ?? weatherData?.meta?.fetchedAt
-        if (!ts) return null
-        const ageMin = Math.max(0, Math.round((Date.now() - ts) / 60_000))
-        if (ageMin < 1) return 'Updated just now'
-        if (ageMin === 1) return 'Updated 1 min ago'
-        return `Updated ${ageMin} min ago`
-    }, [lastUpdated, weatherData?.meta?.fetchedAt])
+    const lastUpdatedLabel = useFocusAwareFreshnessLabel(
+        lastUpdated ?? weatherData?.meta?.fetchedAt ?? null
+    )
 
     const sourceLabel =
         weatherData?.meta?.source ?? WEATHER_SOURCE_OPEN_METEO
@@ -304,9 +304,7 @@ export default function Home() {
                                 selectedHour={selectedHour}
                                 onHourChange={setSelectedHour}
                                 hasInitialized={hasInitializedHour}
-                                onInitialized={() =>
-                                    setHasInitializedHour(true)
-                                }
+                                onInitialized={handleHourInitialized}
                                 className="pt-2"
                             />
                         </View>

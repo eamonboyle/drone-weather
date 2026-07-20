@@ -11,7 +11,7 @@ import {
     convertDistance,
 } from '@/utils/unitConversion'
 import { API_WIND_UNIT } from '@/constants/weatherUnits'
-import { addHours, isBefore, startOfHour } from 'date-fns'
+import { addHours, isBefore, startOfHour } from '@/utils/dateHour'
 
 export type { DroneFlightConditions } from '@/types/weather'
 

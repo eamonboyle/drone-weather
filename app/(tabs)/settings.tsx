@@ -8,7 +8,7 @@ import {
 } from 'react-native'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import Constants from 'expo-constants'
 import * as Location from 'expo-location'
 
@@ -36,11 +36,14 @@ export default function SettingsScreen() {
         DEFAULT_WEATHER_THRESHOLDS
     )
     const [isLoading, setIsLoading] = useState(true)
-    const [isSaving, setIsSaving] = useState(false)
     const [permissionStatus, setPermissionStatus] = useState<string>('unknown')
     const [cacheAgeLabel, setCacheAgeLabel] = useState<string>('No cache')
     const saveQueue = useRef(Promise.resolve())
     const draftRef = useRef(draft)
+    const hasLoadedRef = useRef(false)
+    /** While set, ignore context→draft sync so async save can't rewind unit toggles. */
+    const pendingLocalRef = useRef<WeatherThresholds | null>(null)
+    const contextThresholdsRef = useRef(DEFAULT_WEATHER_THRESHOLDS)
     const {
         selectedProfile,
         updateThresholds,
@@ -49,16 +52,20 @@ export default function SettingsScreen() {
         thresholds: contextThresholds,
     } = useWeatherConfig()
     const { locationName, location } = useLocation()
+    contextThresholdsRef.current = contextThresholds
 
     const loadThresholds = useCallback(async () => {
         try {
             const loadedThresholds = await WeatherConfigService.getThresholds()
+            draftRef.current = loadedThresholds
             setDraft(loadedThresholds)
         } catch (error) {
             console.error('Error loading thresholds:', error)
             Alert.alert('Error', 'Failed to load weather thresholds')
+            draftRef.current = DEFAULT_WEATHER_THRESHOLDS
             setDraft(DEFAULT_WEATHER_THRESHOLDS)
         } finally {
+            hasLoadedRef.current = true
             setIsLoading(false)
         }
     }, [])
@@ -95,10 +102,19 @@ export default function SettingsScreen() {
 
     useEffect(() => {
         void loadThresholds()
-        void refreshDataSection()
-    }, [loadThresholds, refreshDataSection])
+    }, [loadThresholds])
 
     useEffect(() => {
+        void refreshDataSection()
+    }, [refreshDataSection])
+
+    // Sync from shared config for external changes (e.g. profile apply), but never
+    // while a local edit is in flight — that was reverting C↔F before save finished.
+    useEffect(() => {
+        if (!hasLoadedRef.current) return
+        if (pendingLocalRef.current) return
+        if (thresholdsMatch(draftRef.current, contextThresholds)) return
+        draftRef.current = contextThresholds
         setDraft(contextThresholds)
     }, [contextThresholds])
 
@@ -106,7 +122,11 @@ export default function SettingsScreen() {
         draftRef.current = draft
     }, [draft])
 
-    const persistDraft = (next: WeatherThresholds) => {
+    const applyAndPersist = (next: WeatherThresholds) => {
+        pendingLocalRef.current = next
+        draftRef.current = next
+        setDraft(next)
+
         saveQueue.current = saveQueue.current
             .then(async () => {
                 const { isValid, errors } =
@@ -117,16 +137,20 @@ export default function SettingsScreen() {
                         'Invalid settings',
                         errors.join('\n') || 'Check your threshold values.'
                     )
+                    const restored = contextThresholdsRef.current
+                    draftRef.current = restored
+                    setDraft(restored)
                     return
                 }
-                setIsSaving(true)
                 await updateThresholds(next)
             })
             .catch((error) => {
                 console.error('Error saving thresholds:', error)
             })
             .finally(() => {
-                setIsSaving(false)
+                if (pendingLocalRef.current === next) {
+                    pendingLocalRef.current = null
+                }
             })
     }
 
@@ -207,9 +231,7 @@ export default function SettingsScreen() {
                 [field]: value,
             },
         })
-        draftRef.current = next
-        setDraft(next)
-        persistDraft(next)
+        applyAndPersist(next)
 
         if (
             selectedProfile &&
@@ -223,14 +245,11 @@ export default function SettingsScreen() {
         category: 'temperature' | 'windSpeed' | 'visibility',
         unit: string
     ) => {
-        const next = convertThresholdsOnUnitChange(
-            draftRef.current,
-            category,
-            unit
-        )
-        draftRef.current = next
-        setDraft(next)
-        persistDraft(next)
+        const current = draftRef.current
+        if (current[category].unit === unit) return
+
+        const next = convertThresholdsOnUnitChange(current, category, unit)
+        applyAndPersist(next)
 
         if (
             selectedProfile &&
@@ -261,7 +280,7 @@ export default function SettingsScreen() {
 
     if (isLoading) {
         return (
-            <SafeAreaView className="flex-1 bg-background">
+            <SafeAreaView className="flex-1 bg-background" edges={['top']}>
                 <View className="flex-1 justify-center items-center">
                     <ActivityIndicator color={Theme.colors.accent} />
                     <Text
@@ -279,18 +298,9 @@ export default function SettingsScreen() {
         Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? '1.0.0'
 
     return (
-        <SafeAreaView className="flex-1 bg-background">
+        <SafeAreaView className="flex-1 bg-background" edges={['top']}>
             <LocationBar locationName={locationName || 'Select Location'} />
             <ScrollView className="flex-1 px-4 pt-4">
-                {isSaving && (
-                    <Text
-                        className="text-slate-500 text-xs mb-2"
-                        style={{ fontFamily: 'DMSans' }}
-                    >
-                        Saving…
-                    </Text>
-                )}
-
                 <DroneProfileSelector
                     selectedProfile={selectedProfile}
                     onSelectProfile={handleDroneProfileSelect}

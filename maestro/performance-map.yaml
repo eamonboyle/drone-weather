@@ -1,0 +1,15 @@
+appId: com.eamonsdiary.droneweather
+---
+# Map / WebView journey — measured separately from core navigation.
+- launchApp
+- tapOn: "Home"
+- tapOn: "Map"
+- assertVisible: "Map"
+- scroll
+- tapOn: "Home"
+- tapOn: "Map"
+- tapOn: "Forecast"
+- tapOn: "Map"
+- tapOn: "Settings"
+- tapOn: "Map"
+- tapOn: "Home"

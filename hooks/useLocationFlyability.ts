@@ -89,16 +89,15 @@ function evaluateFlyability(
     return conditions.isSuitable ? 'safe' : 'not_flyable'
 }
 
-async function fetchWeatherForLocation(
+function batchCacheKey(latitude: number, longitude: number): string {
+    return `${latitude.toFixed(3)},${longitude.toFixed(3)}`
+}
+
+async function fetchWeatherMiss(
     latitude: number,
     longitude: number
 ): Promise<WeatherData | null> {
     try {
-        const cached = await WeatherCacheService.getCachedWeather(
-            latitude,
-            longitude
-        )
-        if (cached) return cached
         return await WeatherService.getCurrentWeather(latitude, longitude)
     } catch {
         return null
@@ -150,30 +149,11 @@ export function useLocationFlyability(
         }
     }, [weatherData?.meta?.utcOffsetSeconds])
 
-    const processLocation = useCallback(
-        async (
+    const evaluateWithData = useCallback(
+        (
             item: FlyabilityLocation,
-            generation: number
-        ): Promise<FlyabilityStatus | null> => {
-            if (generation !== generationRef.current) return null
-
-            let data: WeatherData | null = null
-            if (
-                location &&
-                weatherData &&
-                coordsMatch(location.coords, item)
-            ) {
-                data = weatherData
-            } else {
-                data = await fetchWeatherForLocation(
-                    item.latitude,
-                    item.longitude
-                )
-            }
-
-            if (generation !== generationRef.current) return null
-            if (!data) return 'unavailable'
-
+            data: WeatherData
+        ): FlyabilityStatus => {
             const stamp = data.meta?.fetchedAt ?? lastUpdated
             const clockHour = getNowClockHour(data)
             const key = resultCacheKey(
@@ -188,12 +168,10 @@ export function useLocationFlyability(
             if (cached) return cached
 
             const status = evaluateFlyability(data, thresholds)
-            if (generation !== generationRef.current) return null
-
             resolvedRef.current.set(key, status)
             return status
         },
-        [location, weatherData, lastUpdated, thresholds, hourTick]
+        [lastUpdated, thresholds, hourTick]
     )
 
     useEffect(() => {
@@ -218,20 +196,71 @@ export function useLocationFlyability(
         })
 
         const runQueue = async () => {
-            const queue = [...locations]
+            const batch = await WeatherCacheService.getCachedWeatherBatch(
+                locations.map((item) => ({
+                    latitude: item.latitude,
+                    longitude: item.longitude,
+                }))
+            )
+
+            if (generation !== generationRef.current) return
+
+            const misses: FlyabilityLocation[] = []
+
+            for (const item of locations) {
+                if (generation !== generationRef.current) return
+
+                let data: WeatherData | null = null
+                if (
+                    location &&
+                    weatherData &&
+                    coordsMatch(location.coords, item)
+                ) {
+                    data = weatherData
+                } else {
+                    data =
+                        batch.get(
+                            batchCacheKey(item.latitude, item.longitude)
+                        ) ?? null
+                }
+
+                if (data) {
+                    const status = evaluateWithData(item, data)
+                    if (
+                        mountedRef.current &&
+                        locationIds.has(item.id) &&
+                        generation === generationRef.current
+                    ) {
+                        setStatusById((prev) => ({
+                            ...prev,
+                            [item.id]: status,
+                        }))
+                    }
+                } else {
+                    misses.push(item)
+                }
+            }
+
+            const queue = [...misses]
             const inFlight: Promise<void>[] = []
 
             const runOne = async (item: FlyabilityLocation) => {
                 if (generation !== generationRef.current) return
 
-                const status = await processLocation(item, generation)
+                const data = await fetchWeatherMiss(
+                    item.latitude,
+                    item.longitude
+                )
                 if (
-                    status === null ||
                     generation !== generationRef.current ||
                     !locationIds.has(item.id)
                 ) {
                     return
                 }
+
+                const status = data
+                    ? evaluateWithData(item, data)
+                    : 'unavailable'
 
                 if (mountedRef.current) {
                     setStatusById((prev) => ({
@@ -267,7 +296,13 @@ export function useLocationFlyability(
         return () => {
             generationRef.current += 1
         }
-    }, [locations, processLocation, enabled])
+    }, [
+        locations,
+        evaluateWithData,
+        enabled,
+        location,
+        weatherData,
+    ])
 
     const getStatus = useCallback(
         (id: string): FlyabilityStatus => statusById[id] ?? 'loading',

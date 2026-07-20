@@ -8,7 +8,7 @@ import {
     ScrollView,
     TextInput,
 } from 'react-native'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import {
     DroneProfile,
     DRONE_PROFILES,

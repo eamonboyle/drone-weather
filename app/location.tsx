@@ -5,10 +5,13 @@ import {
     ScrollView,
     Pressable,
     Keyboard,
+    KeyboardAvoidingView,
+    Platform,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+import Ionicons from '@expo/vector-icons/Ionicons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { useLocation } from '@/contexts/LocationContext'
 import { useWeatherForLocation } from '@/hooks/useWeatherForLocation'
 import { useLocationSearch } from '@/hooks/useLocationSearch'
@@ -103,17 +106,32 @@ export default function LocationScreen() {
 
     return (
         <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-            <View className="flex-row items-center justify-between px-4 py-3 border-b border-white/5">
+            <KeyboardAvoidingView
+                className="flex-1"
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+            >
+                <View className="flex-row items-center justify-between px-4 py-3 border-b border-white/5">
                     <Pressable
                         onPress={handleBack}
                         className="w-10 h-10 items-center justify-center rounded-lg active:bg-surface/50"
                         hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel="Go back"
                     >
-                        <MaterialCommunityIcons
-                            name="arrow-left"
-                            size={24}
-                            color="#f59e0b"
-                        />
+                        {Platform.OS === 'ios' ? (
+                            <Ionicons
+                                name="chevron-back"
+                                size={28}
+                                color="#f59e0b"
+                            />
+                        ) : (
+                            <MaterialCommunityIcons
+                                name="arrow-left"
+                                size={24}
+                                color="#f59e0b"
+                            />
+                        )}
                     </Pressable>
                     <Text
                         className="text-slate-100 text-lg"
@@ -136,6 +154,7 @@ export default function LocationScreen() {
                 <ScrollView
                     className="flex-1"
                     keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
                     showsVerticalScrollIndicator={false}
                 >
                     <CurrentLocationCard
@@ -227,6 +246,7 @@ export default function LocationScreen() {
                         }
                     />
                 </ScrollView>
+            </KeyboardAvoidingView>
         </SafeAreaView>
     )
 }

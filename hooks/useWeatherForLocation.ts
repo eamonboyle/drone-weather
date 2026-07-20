@@ -3,8 +3,9 @@ import { useLocation } from '@/contexts/LocationContext'
 import { useWeatherData } from '@/contexts/WeatherDataContext'
 
 /**
- * Thin consumer of the shared weather store. Home, Forecast, Map, and LocationBar
- * all read the same location-keyed freshness/error state.
+ * Thin consumer of the shared weather store. Home, Forecast, and Map
+ * read the same location-keyed freshness/error state and trigger loadWeather.
+ * LocationBar intentionally does not use this hook (avoids a duplicate load effect).
  */
 export function useWeatherForLocation() {
     const { location, isLocating, errorMsg } = useLocation()

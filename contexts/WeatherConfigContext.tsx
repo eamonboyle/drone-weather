@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import React, {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useState,
+} from 'react'
 import {
     WeatherThresholds,
     DEFAULT_WEATHER_THRESHOLDS,
@@ -35,7 +42,7 @@ export function WeatherConfigProvider({
     const [selectedProfile, setSelectedProfileState] =
         useState<DroneProfile | null>(null)
 
-    const refreshThresholds = async () => {
+    const refreshThresholds = useCallback(async () => {
         try {
             const [loadedThresholds, profileId] = await Promise.all([
                 WeatherConfigService.getThresholds(),
@@ -48,46 +55,68 @@ export function WeatherConfigProvider({
             setThresholds(DEFAULT_WEATHER_THRESHOLDS)
             setSelectedProfileState(null)
         }
-    }
-
-    const updateThresholds = async (newThresholds: WeatherThresholds) => {
-        try {
-            await WeatherConfigService.saveThresholds(newThresholds)
-            setThresholds(newThresholds)
-        } catch (error) {
-            console.error('Error updating thresholds:', error)
-            setThresholds(DEFAULT_WEATHER_THRESHOLDS)
-        }
-    }
-
-    const setSelectedProfile = async (profile: DroneProfile) => {
-        await Promise.all([
-            updateThresholds(profile.thresholds),
-            WeatherConfigService.saveSelectedProfileId(profile.id),
-        ])
-        setSelectedProfileState(profile)
-    }
-
-    const clearSelectedProfile = async () => {
-        await WeatherConfigService.saveSelectedProfileId(null)
-        setSelectedProfileState(null)
-    }
-
-    useEffect(() => {
-        refreshThresholds()
     }, [])
 
+    const updateThresholds = useCallback(
+        async (newThresholds: WeatherThresholds) => {
+            // Apply immediately so unit toggles don't wait on AsyncStorage.
+            setThresholds(newThresholds)
+            try {
+                await WeatherConfigService.saveThresholds(newThresholds)
+            } catch (error) {
+                console.error('Error updating thresholds:', error)
+                // Keep the optimistic value — snapping back to defaults flashes the UI.
+                try {
+                    await refreshThresholds()
+                } catch {
+                    // already logged above
+                }
+            }
+        },
+        [refreshThresholds]
+    )
+
+    const setSelectedProfile = useCallback(
+        async (profile: DroneProfile) => {
+            await Promise.all([
+                updateThresholds(profile.thresholds),
+                WeatherConfigService.saveSelectedProfileId(profile.id),
+            ])
+            setSelectedProfileState(profile)
+        },
+        [updateThresholds]
+    )
+
+    const clearSelectedProfile = useCallback(async () => {
+        await WeatherConfigService.saveSelectedProfileId(null)
+        setSelectedProfileState(null)
+    }, [])
+
+    useEffect(() => {
+        void refreshThresholds()
+    }, [refreshThresholds])
+
+    const value = useMemo(
+        () => ({
+            thresholds,
+            selectedProfile,
+            refreshThresholds,
+            updateThresholds,
+            setSelectedProfile,
+            clearSelectedProfile,
+        }),
+        [
+            thresholds,
+            selectedProfile,
+            refreshThresholds,
+            updateThresholds,
+            setSelectedProfile,
+            clearSelectedProfile,
+        ]
+    )
+
     return (
-        <WeatherConfigContext.Provider
-            value={{
-                thresholds,
-                selectedProfile,
-                refreshThresholds,
-                updateThresholds,
-                setSelectedProfile,
-                clearSelectedProfile,
-            }}
-        >
+        <WeatherConfigContext.Provider value={value}>
             {children}
         </WeatherConfigContext.Provider>
     )

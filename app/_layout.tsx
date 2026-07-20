@@ -1,26 +1,22 @@
-import FontAwesome from '@expo/vector-icons/FontAwesome'
 import { DarkTheme, ThemeProvider } from 'expo-router/react-navigation'
 import { useFonts } from 'expo-font'
 import { Stack } from 'expo-router'
 import * as SplashScreen from 'expo-splash-screen'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect } from 'react'
+import { Platform } from 'react-native'
+// Required by NativeWind / react-native-css-interop (and Reanimated babel plugin).
 import 'react-native-reanimated'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { enableFreeze } from 'react-native-screens'
 import { LocationProvider } from '@/contexts/LocationContext'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
-import {
-    Outfit_400Regular,
-    Outfit_500Medium,
-    Outfit_600SemiBold,
-    Outfit_700Bold,
-} from '@expo-google-fonts/outfit'
-import {
-    DMSans_400Regular,
-    DMSans_500Medium,
-    DMSans_600SemiBold,
-} from '@expo-google-fonts/dm-sans'
+import { Outfit_400Regular } from '@expo-google-fonts/outfit/400Regular'
+import { Outfit_600SemiBold } from '@expo-google-fonts/outfit/600SemiBold'
+import { DMSans_400Regular } from '@expo-google-fonts/dm-sans/400Regular'
+import { DMSans_500Medium } from '@expo-google-fonts/dm-sans/500Medium'
+import Ionicons from '@expo/vector-icons/Ionicons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 
 import { WeatherConfigProvider } from '@/contexts/WeatherConfigContext'
 import { WeatherDataProvider } from '@/contexts/WeatherDataContext'
@@ -41,15 +37,14 @@ SplashScreen.preventAutoHideAsync()
 enableFreeze(true)
 
 export default function RootLayout() {
+    // Only faces referenced via fontFamily + icon fonts used in tabs/chrome.
     const [loaded, error] = useFonts({
         Outfit: Outfit_400Regular,
-        'Outfit-Medium': Outfit_500Medium,
         'Outfit-SemiBold': Outfit_600SemiBold,
-        'Outfit-Bold': Outfit_700Bold,
         DMSans: DMSans_400Regular,
         'DMSans-Medium': DMSans_500Medium,
-        'DMSans-SemiBold': DMSans_600SemiBold,
-        ...FontAwesome.font,
+        ...Ionicons.font,
+        ...MaterialCommunityIcons.font,
     })
 
     // Expo Router uses Error Boundaries to catch errors in the navigation tree.
@@ -63,10 +58,8 @@ export default function RootLayout() {
         }
     }, [loaded])
 
-    if (!loaded) {
-        return null
-    }
-
+    // Mount data providers immediately so GPS / cache / weather can start while
+    // fonts finish loading. Only gate the navigator (and splash) on fonts.
     return (
         <ThemeProvider value={DarkTheme}>
             <GestureHandlerRootView style={{ flex: 1 }}>
@@ -74,29 +67,39 @@ export default function RootLayout() {
                     <WeatherConfigProvider>
                         <WeatherDataProvider>
                             <LocationProvider>
-                                <Stack
-                                    screenOptions={{
-                                        headerShown: false,
-                                        contentStyle: { backgroundColor: '#08090c' },
-                                        animation: 'default',
-                                        freezeOnBlur: true,
-                                    }}
-                                >
-                                    <Stack.Screen
-                                        name="(tabs)"
-                                        options={{ headerShown: false }}
-                                    />
-                                    <Stack.Screen
-                                        name="location"
-                                        options={{
-                                            headerShown: false,
-                                            animation: 'simple_push',
-                                            presentation: 'card',
-                                            freezeOnBlur: true,
-                                        }}
-                                    />
-                                </Stack>
-                                <StatusBar style="light" />
+                                {loaded ? (
+                                    <>
+                                        <Stack
+                                            screenOptions={{
+                                                headerShown: false,
+                                                contentStyle: {
+                                                    backgroundColor: '#08090c',
+                                                },
+                                                animation: 'default',
+                                                freezeOnBlur: true,
+                                            }}
+                                        >
+                                            <Stack.Screen
+                                                name="(tabs)"
+                                                options={{ headerShown: false }}
+                                            />
+                                            <Stack.Screen
+                                                name="location"
+                                                options={{
+                                                    headerShown: false,
+                                                    animation: 'simple_push',
+                                                    // iOS sheet feels native for location search; Android keeps a card.
+                                                    presentation:
+                                                        Platform.OS === 'ios'
+                                                            ? 'modal'
+                                                            : 'card',
+                                                    freezeOnBlur: true,
+                                                }}
+                                            />
+                                        </Stack>
+                                        <StatusBar style="light" />
+                                    </>
+                                ) : null}
                             </LocationProvider>
                         </WeatherDataProvider>
                     </WeatherConfigProvider>

@@ -9,7 +9,7 @@ import {
     Platform,
 } from 'react-native'
 import { WebView, WebViewNavigation } from 'react-native-webview'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { useLocation } from '@/contexts/LocationContext'
 import {
     buildEmbedMapUrl,
@@ -43,6 +43,7 @@ export function DroneMapView() {
     const hasMarkedReady = useRef(false)
     const loadFailedRef = useRef(false)
     const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const webViewRef = useRef<WebView>(null)
 
     // Pin center so GPS ticker updates don't reload the WebView forever
     const [center, setCenter] = useState<MapCenter>(() => ({
@@ -104,6 +105,26 @@ export function DroneMapView() {
         return clearLoadTimeout
     }, [mapUrl, reloadKey, beginLoad, clearLoadTimeout])
 
+    // Tear down Google Maps document before native WebView destroy.
+    // Capture the instance in the effect body (not cleanup) so exhaustive-deps
+    // is satisfied. Only re-run when reloadKey/mapUrl remount the WebView —
+    // not on loadState, which would blank a healthy map on loading → ready.
+    useEffect(() => {
+        const webView = webViewRef.current
+        return () => {
+            clearLoadTimeout()
+            if (!webView) return
+            try {
+                webView.stopLoading()
+                webView.injectJavaScript(
+                    'try{window.location.replace("about:blank")}catch(e){}'
+                )
+            } catch {
+                // Best-effort; unmount still proceeds.
+            }
+        }
+    }, [clearLoadTimeout, reloadKey, mapUrl])
+
     const handleRetry = () => {
         setReloadKey((k) => k + 1)
     }
@@ -158,11 +179,15 @@ export function DroneMapView() {
             <View style={styles.mapContainer}>
                 {loadState === 'loading' || loadState === 'ready' ? (
                     <WebView
+                        ref={webViewRef}
                         key={`${reloadKey}-${center.latitude.toFixed(4)}-${center.longitude.toFixed(4)}`}
                         source={{ uri: mapUrl }}
                         style={styles.map}
                         javaScriptEnabled
                         domStorageEnabled
+                        // Android: disable cache to avoid a stuck/degraded Maps shell.
+                        // iOS WKWebView: keep cache so remount-on-focus reuses assets.
+                        cacheEnabled={Platform.OS !== 'android'}
                         thirdPartyCookiesEnabled
                         sharedCookiesEnabled
                         setSupportMultipleWindows={false}
@@ -183,6 +208,10 @@ export function DroneMapView() {
                         }}
                         onLoadEnd={markReady}
                         onNavigationStateChange={handleNavigationChange}
+                        onContentProcessDidTerminate={() => {
+                            // WKWebView can kill the content process under memory pressure.
+                            setReloadKey((k) => k + 1)
+                        }}
                         onError={() => {
                             clearLoadTimeout()
                             loadFailedRef.current = true

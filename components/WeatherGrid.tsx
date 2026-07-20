@@ -1,6 +1,6 @@
 import { View, Text, Pressable } from 'react-native'
 import { WeatherData, DroneFlightConditions, FlyabilityFactor } from '@/types/weather'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { useMemo, useState } from 'react'
 import { WindDataPopup } from './WindDataPopup'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'

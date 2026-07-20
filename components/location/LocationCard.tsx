@@ -1,6 +1,6 @@
 import React, { memo } from 'react'
 import { View, Text, Pressable, ActivityIndicator } from 'react-native'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import * as Haptics from 'expo-haptics'
 import { LocationSearchResult } from '@/services/locationSearchService'
 import { FlyabilityStatus } from '@/hooks/useLocationFlyability'

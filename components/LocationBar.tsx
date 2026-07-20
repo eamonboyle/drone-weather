@@ -1,19 +1,23 @@
 import { View, Text, Pressable, Alert, ActivityIndicator } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import Ionicons from '@expo/vector-icons/Ionicons'
 import { useState } from 'react'
 import { useRouter } from 'expo-router'
 import { useLocation } from '@/contexts/LocationContext'
-import { useWeatherForLocation } from '@/hooks/useWeatherForLocation'
+import { lightImpactHaptic } from '@/utils/haptics'
 
 interface LocationBarProps {
     locationName: string
 }
 
+/**
+ * Location chrome only. Weather reload is owned by each screen's
+ * useWeatherForLocation effect when GPS coords change — avoid a second
+ * loadWeather subscription from this shared bar.
+ */
 export function LocationBar({ locationName }: LocationBarProps) {
     const router = useRouter()
     const [isLoading, setIsLoading] = useState(false)
     const { refreshLocation } = useLocation()
-    const { refetch } = useWeatherForLocation()
 
     const handleSearchPress = () => {
         router.push('/location')
@@ -23,9 +27,9 @@ export function LocationBar({ locationName }: LocationBarProps) {
         if (isLoading) return
 
         setIsLoading(true)
+        lightImpactHaptic()
         try {
             await refreshLocation()
-            await refetch()
         } catch (error) {
             console.error('Error getting location:', error)
             Alert.alert('Error', 'Failed to get current location')

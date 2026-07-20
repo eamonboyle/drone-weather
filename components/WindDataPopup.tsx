@@ -1,5 +1,5 @@
 import { View, Text, Modal, Pressable } from 'react-native'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { useWeatherConfig } from '@/contexts/WeatherConfigContext'
 import {
     formatWindSpeedMph,

@@ -1,7 +1,7 @@
 import { Link, Stack } from 'expo-router'
 import { Text, Pressable, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { MaterialCommunityIcons } from '@expo/vector-icons'
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { Theme } from '@/constants/Theme'
 
 export default function NotFoundScreen() {
