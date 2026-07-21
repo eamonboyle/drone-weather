@@ -15,7 +15,7 @@ A React Native (Expo) app that helps drone pilots decide whether conditions are 
 - Per-location weather cache (60-minute TTL)
 - Forecast hours labeled in the location’s timezone
 - Drone profiles, unit conversion (metric/imperial), and location search
-- UK airspace reference map (situational awareness only)
+- Native airspace map (MapLibre) with UK pack + OpenAIP country layers (situational awareness only)
 - Dark aviation-inspired UI with accessibility labels on key controls
 
 ## Getting Started
@@ -26,17 +26,19 @@ A React Native (Expo) app that helps drone pilots decide whether conditions are 
     npm install
     ```
 
-2. Start the development server:
+2. Start the development server (requires a **dev build** — MapLibre is not in Expo Go):
 
     ```bash
     npx expo start
     ```
 
-3. Run on your preferred platform:
+3. Run on your preferred platform with a development client:
 
-- Press `a` for Android
-- Press `i` for iOS
-- Scan the QR code with Expo Go
+```bash
+npx expo run:ios
+# or
+npx expo run:android
+```
 
 ## Scripts
 
@@ -56,7 +58,28 @@ A React Native (Expo) app that helps drone pilots decide whether conditions are 
 - Expo Router
 - Open-Meteo weather API
 - OpenCage geocoding
+- MapLibre Native maps + OpenFreeMap basemap tiles
+- Free airspace packs: NATS UK UAS dataset (ingest) and OpenAIP country GeoJSON
 - date-fns, Reanimated, Gesture Handler
+
+## Airspace data
+
+The Map tab is **reference only** and does not affect weather flyability.
+
+| Layer | Source | Notes |
+|--------|--------|--------|
+| UK pack | Bundled `assets/airspace/uk-restrictions.geojson` | Bootstrap from OpenAIP GB, or replace via NATS KMZ ingest |
+| Global | OpenAIP daily country exports (cached on device) | CC BY-NC attribution required |
+
+```bash
+# Official NATS UAS KMZ/KML → bundled UK pack
+npm run airspace:ingest-nats -- path/to/uas-flight-restrictions.kmz
+
+# Free interim UK pack from OpenAIP GB
+npm run airspace:bootstrap-uk
+```
+
+Download NATS digital datasets from the [NATS UAS Restriction Zones / Digital Datasets](https://nats-uk.ead-it.com/cms-nats/opencms/en/Publications/digital-datasets) page (AIRAC cycle). Temporary NOTAMs are not included.
 
 ## Configuration
 
@@ -69,7 +92,13 @@ Safety thresholds (Settings):
 
 Cloud cover remains in profile metadata for reference but is **not** a safety slider and does not affect flyability.
 
-`app.config.js` `extra` values are public client configuration (e.g. OpenCage key for the client). Do not store secrets there.
+### OpenCage (location search)
+
+1. Copy `.env.example` → `.env`
+2. Set `OPENCAGE_API_KEY` from https://opencagedata.com/dashboard#api-keys
+3. Restart Metro (`npx expo start --dev-client`) so `app.config.js` reloads
+
+`.env` is gitignored. The key is embedded in the client bundle via `expo-constants` `extra` — treat it as a **public client key** (restrict usage in the OpenCage dashboard if available). Do not put high-value secrets there.
 
 ## Quality gates
 

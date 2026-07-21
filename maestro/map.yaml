@@ -2,8 +2,9 @@ appId: com.eamonsdiary.droneweather
 ---
 - launchApp
 - tapOn: "Map"
-- assertVisible: "UK airspace reference"
+- assertVisible: "Airspace reference"
 - assertVisible: "Reference only"
+- assertVisible: "OpenAIP"
 - assertVisible:
-    text: "Retry|Loading map|Unable to load"
+    text: "Recenter|Update data|Loading map"
     optional: true

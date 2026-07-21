@@ -1,3 +1,6 @@
+// Load OPENCAGE_API_KEY (and other vars) from a local .env — never commit .env.
+require('dotenv').config()
+
 module.exports = {
     expo: {
         name: 'drone-weather',
@@ -41,6 +44,7 @@ module.exports = {
             'expo-image',
             'expo-web-browser',
             'expo-status-bar',
+            '@maplibre/maplibre-react-native',
             [
                 'expo-location',
                 {
@@ -64,7 +68,7 @@ module.exports = {
         extra: {
             // Public client configuration only — never put secrets here.
             opencageApiKey: process.env.OPENCAGE_API_KEY,
-            googleMyMapsId: '1BktWMPYNuh6N5_IPngyq8jW80nAWXI8d',
+            mapStyleUrl: 'https://tiles.openfreemap.org/styles/liberty',
             eas: {
                 projectId: 'ec84979d-cb35-482c-9eec-aa21a0afc21a',
             },

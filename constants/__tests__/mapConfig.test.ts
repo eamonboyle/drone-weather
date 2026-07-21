@@ -1,37 +1,25 @@
 import {
-    isAllowedGoogleMapsHost,
-    isAllowedMapNavigationUrl,
+    guessCountryCode,
+    isInUkBounds,
+    MAP_CONFIG,
 } from '@/constants/mapConfig'
 
-describe('mapConfig allowlist', () => {
-    it('allows google.com and country TLDs', () => {
-        expect(isAllowedGoogleMapsHost('www.google.com')).toBe(true)
-        expect(isAllowedGoogleMapsHost('maps.google.co.uk')).toBe(true)
-        expect(isAllowedGoogleMapsHost('google.de')).toBe(true)
-        expect(isAllowedGoogleMapsHost('www.googleapis.com')).toBe(true)
-        expect(isAllowedGoogleMapsHost('fonts.gstatic.com')).toBe(true)
+describe('mapConfig', () => {
+    it('exposes a default UK-region center and style URL', () => {
+        expect(MAP_CONFIG.defaultCenter.latitude).toBeGreaterThan(50)
+        expect(MAP_CONFIG.mapStyleUrl).toContain('http')
     })
 
-    it('rejects non-Google hosts and suffix spoofs', () => {
-        expect(isAllowedGoogleMapsHost('evil.com')).toBe(false)
-        expect(isAllowedGoogleMapsHost('notgoogle.com')).toBe(false)
-        expect(isAllowedGoogleMapsHost('google.evil.com')).toBe(false)
-        expect(isAllowedGoogleMapsHost('maps.google.com.evil')).toBe(false)
-        expect(isAllowedGoogleMapsHost('maps.google.com.evil.com')).toBe(false)
-        expect(isAllowedGoogleMapsHost('www.google.com.attacker.io')).toBe(
-            false
-        )
+    it('detects UK bounds without swallowing the Republic of Ireland', () => {
+        expect(isInUkBounds(51.5, -0.12)).toBe(true)
+        expect(isInUkBounds(54.6, -5.9)).toBe(true) // NI
+        expect(isInUkBounds(53.3, -6.3)).toBe(false) // Dublin
+        expect(isInUkBounds(40.7, -74)).toBe(false)
     })
 
-    it('allows https Google URLs and blank/blob', () => {
-        expect(
-            isAllowedMapNavigationUrl('https://maps.google.co.uk/maps')
-        ).toBe(true)
-        expect(isAllowedMapNavigationUrl('about:blank')).toBe(true)
-        expect(isAllowedMapNavigationUrl('blob:https://example.com/1')).toBe(
-            true
-        )
-        expect(isAllowedMapNavigationUrl('http://maps.google.com')).toBe(false)
-        expect(isAllowedMapNavigationUrl('https://evil.com')).toBe(false)
+    it('guesses country codes from approximate regions', () => {
+        expect(guessCountryCode(51.5, -0.12)).toBe('gb')
+        expect(guessCountryCode(53.3, -6.3)).toBe('ie')
+        expect(guessCountryCode(40.7, -74)).toBe('us')
     })
 })

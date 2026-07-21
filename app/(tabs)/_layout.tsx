@@ -65,9 +65,6 @@ export default function TabLayout() {
                         />
                     ),
                     headerShown: false,
-                    // Allow blur cleanup to unmount the Google WebView; freeze
-                    // would keep the native WebView process alive off-tab.
-                    freezeOnBlur: false,
                 }}
             />
             <Tabs.Screen

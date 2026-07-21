@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Sample UK UAS FRZ (fixture)</name>
+    <Placemark>
+      <name>EGLL Heathrow FRZ (sample)</name>
+      <description>Flight Restriction Zone — fixture for tests / bootstrap</description>
+      <Polygon>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>
+              -0.55,51.52,0
+              -0.35,51.52,0
+              -0.35,51.42,0
+              -0.55,51.42,0
+              -0.55,51.52,0
+            </coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+    <Placemark>
+      <name>EGKK Gatwick FRZ (sample)</name>
+      <description>Flight Restriction Zone</description>
+      <Polygon>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>
+              -0.30,51.20,0
+              -0.10,51.20,0
+              -0.10,51.10,0
+              -0.30,51.10,0
+              -0.30,51.20,0
+            </coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+    <Placemark>
+      <name>D123 Danger Area (sample)</name>
+      <description>Danger area</description>
+      <Polygon>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>
+              -4.20,50.40,0
+              -4.00,50.40,0
+              -4.00,50.25,0
+              -4.20,50.25,0
+              -4.20,50.40,0
+            </coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+  </Document>
+</kml>

@@ -1,7 +1,6 @@
-import React, { useCallback, useState } from 'react'
+import React from 'react'
 import { View, Text } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useFocusEffect } from 'expo-router/react-navigation'
 import { DroneMapView } from '@/components/MapView'
 import { LocationBar } from '@/components/LocationBar'
 import { useLocation } from '@/contexts/LocationContext'
@@ -12,18 +11,6 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 export default function MapScreen() {
     const { locationName, errorMsg } = useLocation()
     const { isOfflineOrStale, error: weatherError } = useWeatherForLocation()
-    const [mapSession, setMapSession] = useState<number | null>(null)
-
-    // Mount a fresh WebView only while focused; clear session on blur so the
-    // native WebView process is destroyed (pairs with freezeOnBlur: false).
-    useFocusEffect(
-        useCallback(() => {
-            setMapSession((prev) => (prev == null ? 1 : prev + 1))
-            return () => {
-                setMapSession(null)
-            }
-        }, [])
-    )
 
     return (
         <SafeAreaView className="flex-1 bg-background" edges={['top']}>
@@ -54,31 +41,8 @@ export default function MapScreen() {
                     </Text>
                 </View>
             )}
-            <View className="flex-1 px-3 pb-3 pt-2">
-                {mapSession != null ? (
-                    <DroneMapView key={mapSession} />
-                ) : (
-                    <View
-                        className="flex-1 items-center justify-center rounded-xl"
-                        style={{ backgroundColor: Theme.colors.surface }}
-                        accessibilityLabel="Map paused while tab is inactive"
-                    >
-                        <MaterialCommunityIcons
-                            name="map-outline"
-                            size={28}
-                            color={Theme.colors.textMuted}
-                        />
-                        <Text
-                            className="text-sm mt-2"
-                            style={{
-                                fontFamily: 'DMSans',
-                                color: Theme.colors.textMuted,
-                            }}
-                        >
-                            Map loads when this tab is open
-                        </Text>
-                    </View>
-                )}
+            <View className="flex-1">
+                <DroneMapView />
             </View>
         </SafeAreaView>
     )
