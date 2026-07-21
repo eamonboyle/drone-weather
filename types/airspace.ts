@@ -47,6 +47,8 @@ export interface AirspacePackMeta {
     fetchedAt: string
     effectiveFrom?: string
     featureCount: number
+    schemaVersion?: number
+    attribution?: string
 }
 
 export interface SelectedAirspaceFeature {

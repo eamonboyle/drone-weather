@@ -9,11 +9,15 @@ import {
     ScrollView,
     Switch,
     Platform,
+    Linking,
+    Alert,
+    type GestureResponderEvent,
 } from 'react-native'
 import {
     Camera,
     type CameraRef,
     GeoJSONSource,
+    type GeoJSONSourceRef,
     Layer,
     Map,
     UserLocation,
@@ -22,20 +26,26 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useLocation } from '@/contexts/LocationContext'
 import {
-    guessCountryCode,
     isInUkBounds,
     MAP_CONFIG,
+    resolveCountryCode,
 } from '@/constants/mapConfig'
 import { Theme } from '@/constants/Theme'
 import { selectionHaptic } from '@/utils/haptics'
+import { exceedsTapSlop } from '@/utils/mapGestures'
 import {
     categoryDisplayLabel,
     categoryFillColor,
 } from '@/services/airspace/classifyAirspace'
-import { getOpenAipPackForCountry } from '@/services/airspace/airspacePackService'
+import {
+    getOpenAipPackForCountry,
+    isLargePackConfirmationError,
+} from '@/services/airspace/airspacePackService'
 import { loadBundledUkRestrictions } from '@/services/airspace/ukAirspaceAsset'
+import { sharedDeviceLocationService } from '@/services/deviceLocationService'
 import type {
     AirspaceFeatureCollection,
+    AirspacePackMeta,
     AirspaceSource,
     SelectedAirspaceFeature,
 } from '@/types/airspace'
@@ -95,7 +105,7 @@ function pickSelectedAirspace(
         geometry?: GeoJSON.Geometry | null
         properties?: Record<string, unknown> | null
     },
-    packs: AirspaceFeatureCollection[] = []
+    fallbackGeometry?: GeoJSON.Polygon | GeoJSON.MultiPolygon | null
 ): SelectedAirspaceFeature | null {
     const props = feature.properties
     if (!props) return null
@@ -108,10 +118,7 @@ function pickSelectedAirspace(
         !geometry ||
         (geometry.type !== 'Polygon' && geometry.type !== 'MultiPolygon')
     ) {
-        const match = packs
-            .flatMap((pack) => pack.features)
-            .find((item) => item.properties.id === id)
-        geometry = match?.geometry
+        geometry = fallbackGeometry ?? undefined
     }
     if (
         !geometry ||
@@ -143,19 +150,54 @@ function pickSelectedAirspace(
     }
 }
 
+async function resolveGeometryFromSource(
+    sourceRef: React.RefObject<GeoJSONSourceRef | null>,
+    featureId: string
+): Promise<GeoJSON.Polygon | GeoJSON.MultiPolygon | null> {
+    try {
+        const collection = await sourceRef.current?.getData([
+            '==',
+            ['get', 'id'],
+            featureId,
+        ])
+        const match = collection?.features?.[0]
+        const geometry = match?.geometry
+        if (
+            geometry &&
+            (geometry.type === 'Polygon' || geometry.type === 'MultiPolygon')
+        ) {
+            return geometry
+        }
+    } catch {
+        // Native getData may be unavailable; selection still works when press includes geometry.
+    }
+    return null
+}
+
 export function DroneMapView() {
-    const { location } = useLocation()
+    const { location, locationCountryCode } = useLocation()
     const cameraRef = useRef<CameraRef>(null)
+    const ukSourceRef = useRef<GeoJSONSourceRef>(null)
+    const openAipSourceRef = useRef<GeoJSONSourceRef>(null)
+    const packLoadGenerationRef = useRef(0)
+    const mountedRef = useRef(true)
+    const touchOriginRef = useRef<{ x: number; y: number } | null>(null)
+    const didDragRef = useRef(false)
+    const clearDragTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+        null
+    )
     const [mapReady, setMapReady] = useState(false)
     const [loadError, setLoadError] = useState<string | null>(null)
     const [showUkLayer, setShowUkLayer] = useState(true)
-    const [showOpenAipLayer, setShowOpenAipLayer] = useState(true)
-    const [openAipPack, setOpenAipPack] =
-        useState<AirspaceFeatureCollection>(EMPTY)
+    const [showOpenAipLayer, setShowOpenAipLayer] = useState(false)
+    const [openAipPackUri, setOpenAipPackUri] = useState<string | null>(null)
+    const [openAipMeta, setOpenAipMeta] = useState<AirspacePackMeta | null>(
+        null
+    )
     const [isFetchingPack, setIsFetchingPack] = useState(false)
     const [selectedFeature, setSelectedFeature] =
         useState<SelectedAirspaceFeature | null>(null)
-    const [packCountry, setPackCountry] = useState('gb')
+    const [packCountry, setPackCountry] = useState<string | null>(null)
     const [layersOpen, setLayersOpen] = useState(false)
 
     const ukPack = useMemo(() => loadBundledUkRestrictions(), [])
@@ -170,7 +212,50 @@ export function DroneMapView() {
             location?.coords.longitude ?? MAP_CONFIG.defaultCenter.longitude,
     }))
 
+    useEffect(() => {
+        mountedRef.current = true
+        return () => {
+            mountedRef.current = false
+            if (clearDragTimeoutRef.current) {
+                clearTimeout(clearDragTimeoutRef.current)
+            }
+        }
+    }, [])
+
+    const handleMapTouchStart = useCallback((event: GestureResponderEvent) => {
+        if (clearDragTimeoutRef.current) {
+            clearTimeout(clearDragTimeoutRef.current)
+            clearDragTimeoutRef.current = null
+        }
+        const { pageX, pageY } = event.nativeEvent
+        touchOriginRef.current = { x: pageX, y: pageY }
+        didDragRef.current = false
+    }, [])
+
+    const handleMapTouchMove = useCallback((event: GestureResponderEvent) => {
+        const origin = touchOriginRef.current
+        if (!origin || didDragRef.current) return
+        const { pageX, pageY } = event.nativeEvent
+        if (exceedsTapSlop(pageX - origin.x, pageY - origin.y)) {
+            didDragRef.current = true
+        }
+    }, [])
+
+    const handleMapTouchEnd = useCallback(() => {
+        touchOriginRef.current = null
+        // Keep the drag flag briefly so GeoJSONSource onPress (which may fire
+        // after touch end) can still suppress pan-as-tap selection.
+        if (clearDragTimeoutRef.current) {
+            clearTimeout(clearDragTimeoutRef.current)
+        }
+        clearDragTimeoutRef.current = setTimeout(() => {
+            didDragRef.current = false
+            clearDragTimeoutRef.current = null
+        }, 50)
+    }, [])
+
     // Follow active location (search / GPS refresh). Skip tiny GPS jitter.
+    // Packs stay tied to this selected location — camera pan does not refetch.
     useEffect(() => {
         if (!location) return
         const next = {
@@ -210,9 +295,11 @@ export function DroneMapView() {
 
     const inUk = isInUkBounds(center.latitude, center.longitude)
     const ukSource = ukPack.metadata?.source ?? 'openaip'
-    const effectiveDate =
-        ukPack.metadata?.effectiveFrom ??
-        openAipPack.metadata?.generatedAt?.slice(0, 10)
+    const effectiveDate = inUk
+        ? (ukPack.metadata?.effectiveFrom ??
+          openAipMeta?.fetchedAt?.slice(0, 10))
+        : (openAipMeta?.fetchedAt?.slice(0, 10) ??
+          openAipMeta?.effectiveFrom)
     const statusMeta = [
         effectiveDate,
         packCountry ? packCountry.toUpperCase() : null,
@@ -221,34 +308,157 @@ export function DroneMapView() {
         .join('  ·  ')
 
     const loadCountryPack = useCallback(
-        async (lat: number, lng: number, options: { force?: boolean } = {}) => {
-            const country = guessCountryCode(lat, lng)
-            setPackCountry(country)
+        async (
+            lat: number,
+            lng: number,
+            preferredCode: string | null,
+            options: { force?: boolean; allowLargePack?: boolean } = {}
+        ) => {
+            const generation = ++packLoadGenerationRef.current
             setIsFetchingPack(true)
             setLoadError(null)
+
             try {
+                let country = resolveCountryCode(lat, lng, preferredCode)
+                if (!country) {
+                    try {
+                        const place =
+                            await sharedDeviceLocationService.reverseGeocodePlaceCached(
+                                lat,
+                                lng
+                            )
+                        country = resolveCountryCode(
+                            lat,
+                            lng,
+                            place.countryCode
+                        )
+                    } catch {
+                        country = null
+                    }
+                }
+
+                if (generation !== packLoadGenerationRef.current) return
+                if (!mountedRef.current) return
+
+                if (!country) {
+                    setPackCountry(null)
+                    setOpenAipPackUri(null)
+                    setOpenAipMeta(null)
+                    setLoadError(
+                        'Airspace data is not available for this country'
+                    )
+                    return
+                }
+
+                setPackCountry(country)
+
                 const pack = await getOpenAipPackForCountry(country, options)
-                setOpenAipPack(pack)
+                if (generation !== packLoadGenerationRef.current) return
+                if (!mountedRef.current) return
+
+                setOpenAipPackUri(pack.uri)
+                setOpenAipMeta(pack.meta)
+                setLoadError(null)
             } catch (error) {
+                if (generation !== packLoadGenerationRef.current) return
+                if (!mountedRef.current) return
+                // Do not keep another country's overlay when this country failed.
+                setOpenAipPackUri(null)
+                setOpenAipMeta(null)
+
+                if (isLargePackConfirmationError(error)) {
+                    const sizeMb = Math.max(
+                        1,
+                        Math.round(error.sizeBytes / (1024 * 1024))
+                    )
+                    const code = error.country.toUpperCase()
+                    Alert.alert(
+                        'Large airspace download',
+                        `Airspace data for ${code} is about ${sizeMb} MB. Loading it may take a moment and use mobile data.`,
+                        [
+                            {
+                                text: 'Not now',
+                                style: 'cancel',
+                                onPress: () => {
+                                    if (!mountedRef.current) return
+                                    if (
+                                        generation !==
+                                        packLoadGenerationRef.current
+                                    )
+                                        return
+                                    setLoadError(
+                                        `Airspace pack for ${code} was skipped (${sizeMb} MB). Tap Retry to download.`
+                                    )
+                                },
+                            },
+                            {
+                                text: 'Download',
+                                onPress: () => {
+                                    void loadCountryPack(
+                                        lat,
+                                        lng,
+                                        preferredCode,
+                                        {
+                                            force: true,
+                                            allowLargePack: true,
+                                        }
+                                    )
+                                },
+                            },
+                        ]
+                    )
+                    return
+                }
+
                 setLoadError(
                     error instanceof Error
                         ? error.message
                         : 'Failed to load airspace data'
                 )
             } finally {
-                setIsFetchingPack(false)
+                if (generation === packLoadGenerationRef.current) {
+                    setIsFetchingPack(false)
+                }
             }
         },
         []
     )
 
     useEffect(() => {
-        void loadCountryPack(center.latitude, center.longitude)
-    }, [center.latitude, center.longitude, loadCountryPack])
+        void loadCountryPack(
+            center.latitude,
+            center.longitude,
+            locationCountryCode
+        )
+    }, [
+        center.latitude,
+        center.longitude,
+        locationCountryCode,
+        loadCountryPack,
+    ])
 
     useEffect(() => {
+        // Mutually exclusive defaults: UK pack inside UK, OpenAIP elsewhere.
         setShowOpenAipLayer(!inUk)
         setShowUkLayer(inUk)
+    }, [inUk])
+
+    const handleToggleUk = useCallback(() => {
+        selectionHaptic()
+        setShowUkLayer((prev) => {
+            const next = !prev
+            if (next && inUk) setShowOpenAipLayer(false)
+            return next
+        })
+    }, [inUk])
+
+    const handleToggleOpenAip = useCallback(() => {
+        selectionHaptic()
+        setShowOpenAipLayer((prev) => {
+            const next = !prev
+            if (next && inUk) setShowUkLayer(false)
+            return next
+        })
     }, [inUk])
 
     const handleRecenter = () => {
@@ -268,10 +478,84 @@ export function DroneMapView() {
 
     const handleRefreshPack = () => {
         selectionHaptic()
-        void loadCountryPack(center.latitude, center.longitude, {
-            force: true,
-        })
+        void loadCountryPack(
+            center.latitude,
+            center.longitude,
+            locationCountryCode,
+            { force: true }
+        )
     }
+
+    const selectAirspaceFeature = useCallback(
+        async (
+            feature: {
+                geometry?: GeoJSON.Geometry | null
+                properties?: Record<string, unknown> | null
+            },
+            sourceRef: React.RefObject<GeoJSONSourceRef | null>,
+            memoryFallback?: AirspaceFeatureCollection
+        ) => {
+            const id = String(feature.properties?.id ?? '')
+            let fallbackGeometry:
+                | GeoJSON.Polygon
+                | GeoJSON.MultiPolygon
+                | null
+                | undefined
+
+            const pressGeometry = feature.geometry
+            const hasPressGeometry =
+                pressGeometry &&
+                (pressGeometry.type === 'Polygon' ||
+                    pressGeometry.type === 'MultiPolygon')
+
+            if (!hasPressGeometry && id) {
+                fallbackGeometry = await resolveGeometryFromSource(
+                    sourceRef,
+                    id
+                )
+                if (!fallbackGeometry && memoryFallback) {
+                    const match = memoryFallback.features.find(
+                        (item) => item.properties.id === id
+                    )
+                    fallbackGeometry = match?.geometry
+                }
+            }
+
+            const selected = pickSelectedAirspace(feature, fallbackGeometry)
+            if (!selected) return
+            selectionHaptic()
+            setSelectedFeature(selected)
+        },
+        []
+    )
+
+    const handleAirspacePress = useCallback(
+        (
+            event: {
+                nativeEvent: {
+                    features?: {
+                        geometry?: GeoJSON.Geometry | null
+                        properties?: Record<string, unknown> | null
+                    }[]
+                }
+            },
+            sourceRef: React.RefObject<GeoJSONSourceRef | null>,
+            memoryFallback?: AirspaceFeatureCollection
+        ) => {
+            if (didDragRef.current) return
+            const feature = event.nativeEvent.features?.[0]
+            if (!feature) return
+            void selectAirspaceFeature(
+                {
+                    geometry: feature.geometry ?? undefined,
+                    properties: feature.properties ?? null,
+                },
+                sourceRef,
+                memoryFallback
+            )
+        },
+        [selectAirspaceFeature]
+    )
 
     const selectedId = selectedFeature?.id ?? ''
     const selectedCollection = useMemo((): AirspaceFeatureCollection => {
@@ -306,18 +590,23 @@ export function DroneMapView() {
     }, [selectedId])
 
     const openAipFillOpacityExpr = useMemo((): unknown => {
-        const base = inUk ? 0.1 : 0.2
-        if (!selectedId) return base
+        if (!selectedId) return 0.2
         return [
             'case',
             ['==', ['get', 'id'], selectedId],
             0.38,
-            inUk ? 0.05 : 0.08,
+            0.08,
         ]
-    }, [selectedId, inUk])
+    }, [selectedId])
 
+    // UK precedence: when UK is on inside UK bounds, do not mount OpenAIP.
     const ukVisible = showUkLayer && ukPack.features.length > 0
-    const openAipVisible = showOpenAipLayer && openAipPack.features.length > 0
+    const openAipSuppressedByUk = inUk && ukVisible
+    const openAipVisible =
+        showOpenAipLayer &&
+        !openAipSuppressedByUk &&
+        Boolean(openAipPackUri) &&
+        (openAipMeta?.featureCount ?? 0) > 0
     const ukLabel = ukSource === 'nats' ? 'UK · NATS' : 'UK pack'
     const categoryColor = selectedFeature
         ? categoryFillColor(selectedFeature.category)
@@ -332,7 +621,13 @@ export function DroneMapView() {
 
     return (
         <View style={styles.shell}>
-            <View style={styles.mapContainer}>
+            <View
+                style={styles.mapContainer}
+                onTouchStart={handleMapTouchStart}
+                onTouchMove={handleMapTouchMove}
+                onTouchEnd={handleMapTouchEnd}
+                onTouchCancel={handleMapTouchEnd}
+            >
                 <Map
                     style={styles.map}
                     mapStyle={MAP_CONFIG.mapStyleUrl}
@@ -340,7 +635,7 @@ export function DroneMapView() {
                     onDidFailLoadingMap={() =>
                         setLoadError('Unable to load basemap tiles')
                     }
-                    attribution={false}
+                    attribution={true}
                     logo={false}
                     accessibilityLabel="Airspace reference map"
                 >
@@ -355,29 +650,12 @@ export function DroneMapView() {
 
                     {ukVisible ? (
                         <GeoJSONSource
+                            ref={ukSourceRef}
                             id="uk-airspace"
                             data={ukPack}
-                            onPress={(event) => {
-                                const feature =
-                                    event.nativeEvent.features?.[0]
-                                if (!feature) return
-                                const selected = pickSelectedAirspace(
-                                    {
-                                        geometry: feature.geometry as
-                                            | GeoJSON.Geometry
-                                            | undefined,
-                                        properties:
-                                            feature.properties as Record<
-                                                string,
-                                                unknown
-                                            > | null,
-                                    },
-                                    [ukPack, openAipPack]
-                                )
-                                if (!selected) return
-                                selectionHaptic()
-                                setSelectedFeature(selected)
-                            }}
+                            onPress={(event) =>
+                                handleAirspacePress(event, ukSourceRef, ukPack)
+                            }
                         >
                             <Layer
                                 type="fill"
@@ -422,31 +700,14 @@ export function DroneMapView() {
                         </GeoJSONSource>
                     ) : null}
 
-                    {openAipVisible ? (
+                    {openAipVisible && openAipPackUri ? (
                         <GeoJSONSource
+                            ref={openAipSourceRef}
                             id="openaip-airspace"
-                            data={openAipPack}
-                            onPress={(event) => {
-                                const feature =
-                                    event.nativeEvent.features?.[0]
-                                if (!feature) return
-                                const selected = pickSelectedAirspace(
-                                    {
-                                        geometry: feature.geometry as
-                                            | GeoJSON.Geometry
-                                            | undefined,
-                                        properties:
-                                            feature.properties as Record<
-                                                string,
-                                                unknown
-                                            > | null,
-                                    },
-                                    [ukPack, openAipPack]
-                                )
-                                if (!selected) return
-                                selectionHaptic()
-                                setSelectedFeature(selected)
-                            }}
+                            data={openAipPackUri}
+                            onPress={(event) =>
+                                handleAirspacePress(event, openAipSourceRef)
+                            }
                         >
                             <Layer
                                 type="fill"
@@ -539,18 +800,13 @@ export function DroneMapView() {
                                 label={ukLabel}
                                 active={showUkLayer}
                                 disabled={!inUk && ukPack.features.length === 0}
-                                onPress={() => {
-                                    selectionHaptic()
-                                    setShowUkLayer((v) => !v)
-                                }}
+                                onPress={handleToggleUk}
                             />
                             <SourceSwitch
                                 label="OpenAIP"
-                                active={showOpenAipLayer}
-                                onPress={() => {
-                                    selectionHaptic()
-                                    setShowOpenAipLayer((v) => !v)
-                                }}
+                                active={showOpenAipLayer && !openAipSuppressedByUk}
+                                disabled={openAipSuppressedByUk}
+                                onPress={handleToggleOpenAip}
                             />
                         </View>
                         <Pressable
@@ -582,12 +838,19 @@ export function DroneMapView() {
                     </View>
 
                     <View style={styles.statusLine} pointerEvents="none">
-                        <Text style={styles.statusLabel}>Reference only</Text>
-                        {statusMeta ? (
-                            <Text style={styles.statusMeta} numberOfLines={1}>
-                                {`  ·  ${statusMeta}`}
+                        <View style={styles.statusChip}>
+                            <Text style={styles.statusLabel}>
+                                Reference only
                             </Text>
-                        ) : null}
+                            {statusMeta ? (
+                                <Text
+                                    style={styles.statusMeta}
+                                    numberOfLines={1}
+                                >
+                                    {`  ·  ${statusMeta}`}
+                                </Text>
+                            ) : null}
+                        </View>
                     </View>
                 </View>
 
@@ -629,10 +892,7 @@ export function DroneMapView() {
                 ) : null}
 
                 {selectedFeature ? (
-                    <View
-                        style={styles.featureSheet}
-                        accessibilityRole="summary"
-                    >
+                    <View style={styles.featureSheet}>
                         <View style={styles.sheetHandle} />
                         <View
                             style={[
@@ -642,7 +902,10 @@ export function DroneMapView() {
                         />
                         <View style={styles.featureSheetHeader}>
                             <View style={styles.featureTextBlock}>
-                                <Text style={styles.featureTitle}>
+                                <Text
+                                    style={styles.featureTitle}
+                                    accessibilityRole="header"
+                                >
                                     {selectedFeature.name}
                                 </Text>
                                 <Text style={styles.featureSubtitle}>
@@ -743,10 +1006,16 @@ export function DroneMapView() {
                 onRefresh={handleRefreshPack}
                 ukLabel={ukLabel}
                 showUkLayer={showUkLayer}
-                showOpenAipLayer={showOpenAipLayer}
-                onToggleUk={() => setShowUkLayer((v) => !v)}
-                onToggleOpenAip={() => setShowOpenAipLayer((v) => !v)}
+                showOpenAipLayer={showOpenAipLayer && !openAipSuppressedByUk}
+                onToggleUk={handleToggleUk}
+                onToggleOpenAip={handleToggleOpenAip}
                 ukDisabled={!inUk && ukPack.features.length === 0}
+                openAipDisabled={openAipSuppressedByUk}
+                openAipDetail={
+                    openAipSuppressedByUk
+                        ? 'Suppressed while UK pack is on'
+                        : 'Drone-relevant community airspace'
+                }
                 effectiveDate={effectiveDate}
                 packCountry={packCountry}
             />
@@ -848,6 +1117,8 @@ function LayersSheet({
     onToggleUk,
     onToggleOpenAip,
     ukDisabled,
+    openAipDisabled,
+    openAipDetail,
     effectiveDate,
     packCountry,
 }: {
@@ -860,8 +1131,10 @@ function LayersSheet({
     onToggleUk: () => void
     onToggleOpenAip: () => void
     ukDisabled: boolean
+    openAipDisabled: boolean
+    openAipDetail: string
     effectiveDate?: string
-    packCountry: string
+    packCountry: string | null
 }) {
     return (
         <Modal
@@ -873,17 +1146,30 @@ function LayersSheet({
             }
             onRequestClose={onClose}
         >
-            <Pressable style={styles.sheetScrim} onPress={onClose}>
+            <View style={styles.sheetScrim}>
                 <Pressable
+                    style={StyleSheet.absoluteFill}
+                    onPress={onClose}
+                    accessibilityRole="button"
+                    accessibilityLabel="Dismiss layers"
+                />
+                <View
                     style={styles.layersSheet}
-                    onPress={(e) => e.stopPropagation()}
+                    accessibilityViewIsModal
+                    importantForAccessibility="yes"
                 >
                     <View style={styles.sheetHandle} />
                     <View style={styles.layersSheetHeader}>
                         <View style={styles.layersTitleBlock}>
                             <Text style={styles.layersEyebrow}>Map</Text>
-                            <Text style={styles.layersTitle}>Airspace</Text>
+                            <Text
+                                style={styles.layersTitle}
+                                accessibilityRole="header"
+                            >
+                                Airspace
+                            </Text>
                         </View>
+                        {/* VoiceOver: must announce as button, not switch — see maestro/README.md */}
                         <Pressable
                             onPress={onClose}
                             style={({ pressed }) => [
@@ -891,6 +1177,7 @@ function LayersSheet({
                                 pressed && styles.controlPressed,
                             ]}
                             hitSlop={8}
+                            accessible
                             accessibilityRole="button"
                             accessibilityLabel="Close layers"
                         >
@@ -924,8 +1211,9 @@ function LayersSheet({
                             <View style={styles.insetSeparator} />
                             <LayerSwitchRow
                                 label="OpenAIP"
-                                detail="Drone-relevant community airspace"
+                                detail={openAipDetail}
                                 value={showOpenAipLayer}
+                                disabled={openAipDisabled}
                                 onValueChange={onToggleOpenAip}
                             />
                             <View style={styles.insetSeparator} />
@@ -961,7 +1249,7 @@ function LayersSheet({
                                     <MaterialCommunityIcons
                                         name="chevron-right"
                                         size={22}
-                                        color={Theme.colors.textMuted}
+                                        color={Theme.colors.textSecondary}
                                         style={styles.insetActionChevron}
                                     />
                                 </View>
@@ -1004,11 +1292,24 @@ function LayersSheet({
                                     {MAP_CONFIG.natsAttribution}{' '}
                                     {MAP_CONFIG.openAipAttribution}
                                 </Text>
+                                <Pressable
+                                    onPress={() => {
+                                        void Linking.openURL(
+                                            MAP_CONFIG.osmCopyrightUrl
+                                        )
+                                    }}
+                                    accessibilityRole="link"
+                                    accessibilityLabel="OpenStreetMap copyright and license"
+                                >
+                                    <Text style={styles.attributionLink}>
+                                        {MAP_CONFIG.basemapAttribution}
+                                    </Text>
+                                </Pressable>
                             </View>
                         </View>
                     </ScrollView>
-                </Pressable>
-            </Pressable>
+                </View>
+            </View>
         </Modal>
     )
 }
@@ -1037,6 +1338,7 @@ function LayerSwitchRow({
 }) {
     return (
         <Pressable
+            accessibilityLabel={`${label}. ${detail}`}
             onPress={() => {
                 if (disabled) return
                 selectionHaptic()
@@ -1070,7 +1372,7 @@ function LayerSwitchRow({
                     Platform.OS === 'android'
                         ? value
                             ? Theme.colors.accent
-                            : Theme.colors.textMuted
+                            : Theme.colors.textSecondary
                         : '#ffffff'
                 }
                 ios_backgroundColor="rgba(255, 255, 255, 0.12)"
@@ -1189,17 +1491,25 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         marginTop: 8,
-        paddingLeft: 6,
+        paddingLeft: 2,
+    },
+    statusChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        maxWidth: '100%',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: Theme.borderRadius.sm,
+        backgroundColor: 'rgba(8, 9, 12, 0.72)',
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: 'rgba(255, 255, 255, 0.08)',
     },
     statusLabel: {
-        color: Theme.colors.accentMuted,
+        color: Theme.colors.accent,
         fontFamily: 'Outfit-SemiBold',
         fontSize: 10.5,
         letterSpacing: 1.4,
         textTransform: 'uppercase',
-        textShadowColor: 'rgba(0, 0, 0, 0.9)',
-        textShadowOffset: { width: 0, height: 1 },
-        textShadowRadius: 4,
     },
     statusMeta: {
         flexShrink: 1,
@@ -1207,9 +1517,6 @@ const styles = StyleSheet.create({
         fontFamily: 'DMSans-Medium',
         fontSize: 10.5,
         letterSpacing: 0.6,
-        textShadowColor: 'rgba(0, 0, 0, 0.9)',
-        textShadowOffset: { width: 0, height: 1 },
-        textShadowRadius: 4,
     },
     sideControls: {
         position: 'absolute',
@@ -1351,7 +1658,7 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     detailLabel: {
-        color: Theme.colors.textMuted,
+        color: Theme.colors.textSecondary,
         fontFamily: 'DMSans',
         fontSize: 12,
     },
@@ -1381,7 +1688,7 @@ const styles = StyleSheet.create({
         fontSize: 11,
     },
     featureDisclaimer: {
-        color: Theme.colors.textMuted,
+        color: Theme.colors.textSecondary,
         fontFamily: 'DMSans',
         fontSize: 11,
         lineHeight: 15,
@@ -1409,6 +1716,8 @@ const styles = StyleSheet.create({
         paddingTop: 10,
         paddingBottom: 40,
         maxHeight: '78%',
+        zIndex: 1,
+        elevation: 4,
     },
     layersSheetHeader: {
         flexDirection: 'row',
@@ -1421,7 +1730,7 @@ const styles = StyleSheet.create({
         gap: 2,
     },
     layersEyebrow: {
-        color: Theme.colors.textMuted,
+        color: Theme.colors.textSecondary,
         fontFamily: 'Outfit-SemiBold',
         fontSize: 11,
         letterSpacing: 0.8,
@@ -1456,7 +1765,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 4,
     },
     sectionLabel: {
-        color: Theme.colors.textMuted,
+        color: Theme.colors.textSecondary,
         fontFamily: 'Outfit-SemiBold',
         fontSize: 12,
         letterSpacing: 0.6,
@@ -1551,12 +1860,12 @@ const styles = StyleSheet.create({
         fontSize: 15,
     },
     layerRowDetail: {
-        color: Theme.colors.textMuted,
+        color: Theme.colors.textSecondary,
         fontFamily: 'DMSans',
         fontSize: 12,
     },
     metaLine: {
-        color: Theme.colors.textMuted,
+        color: Theme.colors.textSecondary,
         fontFamily: 'DMSans',
         fontSize: 12,
     },
@@ -1567,9 +1876,16 @@ const styles = StyleSheet.create({
         letterSpacing: 0.2,
     },
     attribution: {
-        color: Theme.colors.textMuted,
+        color: Theme.colors.textSecondary,
         fontFamily: 'DMSans',
         fontSize: 11,
         lineHeight: 16,
+    },
+    attributionLink: {
+        color: Theme.colors.textSecondary,
+        fontFamily: 'DMSans',
+        fontSize: 11,
+        lineHeight: 16,
+        textDecorationLine: 'underline',
     },
 })

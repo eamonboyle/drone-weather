@@ -26,4 +26,16 @@ Produces a UK pack from the public OpenAIP GB daily GeoJSON export (`source: "op
 ## Notes
 
 - Packs are permanent restrictions only — NOTAMs / temporary restrictions are not included.
-- OpenAIP data is CC BY-NC 4.0; the app shows attribution on the Map tab.
+- OpenAIP data is CC BY-NC 4.0; the app shows attribution on the Map tab and stores attribution on cached artifacts. Confirm product distribution stays compatible with [OpenAIP licence terms](https://www.openaip.net/) (data remains free; not sold exclusively).
+- On-device normalize has size/feature caps. Oversized country exports (e.g. US) are rejected safely rather than crashing.
+
+## Follow-up: large-country packs (Track B)
+
+Full support for large OpenAIP countries should **not** normalize megabyte exports on device. Preferred pipeline:
+
+1. CI or hosted job downloads `{cc}_asp.geojson` from the OpenAIP bucket.
+2. Apply the same drone-relevant filter + simplify stride as `normalizeOpenAipFeatureCollection`.
+3. Publish the normalized artifact (with attribution metadata).
+4. App downloads that artifact directly into `airspace-packs-v3/` (skip on-device normalize).
+
+Do not claim US/CA map rendering until the normalized artifact size is measured and simulator-tested.

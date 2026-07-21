@@ -1,4 +1,10 @@
 import * as Location from 'expo-location'
+import { normalizeCountryCode } from '@/constants/mapConfig'
+
+export interface ReverseGeocodePlace {
+    name: string
+    countryCode: string | null
+}
 
 export function formatPlaceName(
     place: Location.LocationGeocodedAddress
@@ -17,13 +23,33 @@ export function formatPlaceName(
     return 'Location name unavailable'
 }
 
-export async function reverseGeocodePlaceName(
+export function placeFromGeocodedAddress(
+    place: Location.LocationGeocodedAddress
+): ReverseGeocodePlace {
+    return {
+        name: formatPlaceName(place),
+        countryCode: normalizeCountryCode(place.isoCountryCode),
+    }
+}
+
+export async function reverseGeocodePlace(
     latitude: number,
     longitude: number
-): Promise<string> {
+): Promise<ReverseGeocodePlace> {
     const [place] = await Location.reverseGeocodeAsync({
         latitude,
         longitude,
     })
-    return place ? formatPlaceName(place) : 'Location name unavailable'
+    if (!place) {
+        return { name: 'Location name unavailable', countryCode: null }
+    }
+    return placeFromGeocodedAddress(place)
+}
+
+export async function reverseGeocodePlaceName(
+    latitude: number,
+    longitude: number
+): Promise<string> {
+    const place = await reverseGeocodePlace(latitude, longitude)
+    return place.name
 }

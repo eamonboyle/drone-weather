@@ -11,7 +11,9 @@ import {
 } from '@/services/savedLocationsService'
 import { useLocation } from '@/contexts/LocationContext'
 
-const SEARCH_DEBOUNCE_MS = 300
+/** Wait for typing to settle — reduces OpenCage calls during Maestro/input. */
+const SEARCH_DEBOUNCE_MS = 500
+const MIN_SEARCH_QUERY_LENGTH = 2
 
 interface UseLocationSearchOptions {
     onLocationSelected?: () => void
@@ -70,11 +72,15 @@ export function useLocationSearch({
                 setResults(searchResults)
             }
         } catch (err) {
+            // Service already logged the OpenCage failure once — only update UI here.
             if (searchRequestRef.current === requestId) {
-                setError('Failed to search locations. Please try again.')
+                setError(
+                    err instanceof Error
+                        ? err.message
+                        : 'Failed to search locations. Please try again.'
+                )
                 setResults([])
             }
-            console.error(err)
         } finally {
             if (searchRequestRef.current === requestId) {
                 setIsSearching(false)
@@ -84,7 +90,7 @@ export function useLocationSearch({
 
     useEffect(() => {
         const query = searchQuery.trim()
-        if (!query) {
+        if (!query || query.length < MIN_SEARCH_QUERY_LENGTH) {
             setResults([])
             setError(null)
             setIsSearching(false)
@@ -114,7 +120,10 @@ export function useLocationSearch({
                 timestamp: Date.now(),
             }
 
-            await updateLocation(mockLocation)
+            await updateLocation(mockLocation, {
+                name: result.formatted,
+                countryCode: result.countryCode ?? null,
+            })
             const updatedRecents =
                 await SavedLocationsService.addRecentLocation(result)
             setRecents(updatedRecents)

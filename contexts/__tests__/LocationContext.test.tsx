@@ -22,6 +22,7 @@ jest.mock('@/services/deviceLocationService', () => ({
     sharedDeviceLocationService: {
         acquireFirstFix: jest.fn(),
         reverseGeocodeCached: jest.fn(),
+        reverseGeocodePlaceCached: jest.fn(),
     },
 }))
 
@@ -60,11 +61,15 @@ function deferred<T>() {
 interface ProbeApi {
     location: Location.LocationObject | null
     locationName: string
+    locationCountryCode: string | null
     deviceLocation: Location.LocationObject | null
     deviceLocationName: string
     isLocating: boolean
     isDeviceLocating: boolean
-    updateLocation: (manual?: Location.LocationObject) => Promise<void>
+    updateLocation: (
+        manual?: Location.LocationObject,
+        meta?: { name?: string; countryCode?: string | null }
+    ) => Promise<void>
     refreshLocation: () => Promise<void>
     ensureDeviceLocation: () => Promise<void>
 }
@@ -74,6 +79,7 @@ function Probe({ onReady }: { onReady: (api: ProbeApi) => void }) {
     onReady({
         location: ctx.location,
         locationName: ctx.locationName,
+        locationCountryCode: ctx.locationCountryCode,
         deviceLocation: ctx.deviceLocation,
         deviceLocationName: ctx.deviceLocationName,
         isLocating: ctx.isLocating,
@@ -88,6 +94,8 @@ function Probe({ onReady }: { onReady: (api: ProbeApi) => void }) {
 describe('LocationContext', () => {
     const mockAcquireFirstFix =
         sharedDeviceLocationService.acquireFirstFix as jest.Mock
+    const mockReverseGeocodePlaceCached =
+        sharedDeviceLocationService.reverseGeocodePlaceCached as jest.Mock
     const mockReverseGeocodeCached =
         sharedDeviceLocationService.reverseGeocodeCached as jest.Mock
     const mockRequestPermissions =
@@ -111,6 +119,12 @@ describe('LocationContext', () => {
         mockRequestPermissions.mockResolvedValue({ status: 'granted' })
         mockHasServices.mockResolvedValue(true)
         mockLastKnown.mockResolvedValue(null)
+        mockReverseGeocodePlaceCached.mockImplementation(
+            async (lat: number, lon: number) => ({
+                name: `Place ${lat},${lon}`,
+                countryCode: null,
+            })
+        )
         mockReverseGeocodeCached.mockImplementation(
             async (lat: number, lon: number) => `Place ${lat},${lon}`
         )
@@ -250,7 +264,10 @@ describe('LocationContext', () => {
     it('uses shared DeviceLocationService for reverse geocode and GPS acquire', async () => {
         const gps = makeLocation(53.35, -6.26)
         mockAcquireFirstFix.mockResolvedValue(gps)
-        mockReverseGeocodeCached.mockResolvedValue('Dublin')
+        mockReverseGeocodePlaceCached.mockResolvedValue({
+            name: 'Dublin',
+            countryCode: 'ie',
+        })
 
         await mountProvider()
         await act(async () => {
@@ -259,9 +276,33 @@ describe('LocationContext', () => {
         })
 
         expect(mockAcquireFirstFix).toHaveBeenCalled()
-        expect(mockReverseGeocodeCached).toHaveBeenCalledWith(53.35, -6.26)
+        expect(mockReverseGeocodePlaceCached).toHaveBeenCalledWith(53.35, -6.26)
         expect(latest!.locationName).toBe('Dublin')
+        expect(latest!.locationCountryCode).toBe('ie')
         expect(latest!.deviceLocationName).toBe('Dublin')
+    })
+
+    it('stores search countryCode atomically with the active location', async () => {
+        const gpsFix = deferred<Location.LocationObject>()
+        mockAcquireFirstFix.mockReturnValue(gpsFix.promise)
+
+        await mountProvider()
+
+        const manual = makeLocation(43.65, -79.38)
+        await act(async () => {
+            await latest!.updateLocation(manual, {
+                name: 'Toronto, Canada',
+                countryCode: 'ca',
+            })
+        })
+
+        expect(latest!.location?.coords.latitude).toBe(43.65)
+        expect(latest!.locationName).toBe('Toronto, Canada')
+        expect(latest!.locationCountryCode).toBe('ca')
+        expect(mockSetItem).toHaveBeenCalledWith(
+            'last_active_location_v2',
+            expect.stringContaining('"countryCode":"ca"')
+        )
     })
 
     it('defers permission bootstrap until onboarding is complete', async () => {

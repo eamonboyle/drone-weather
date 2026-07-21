@@ -1,5 +1,8 @@
 import * as Location from 'expo-location'
-import { reverseGeocodePlaceName } from '@/utils/locationFormatting'
+import {
+    reverseGeocodePlace,
+    type ReverseGeocodePlace,
+} from '@/utils/locationFormatting'
 
 const GPS_TIMEOUT_MS = 8_000
 
@@ -12,7 +15,7 @@ export interface DeviceLocationDeps {
     hasServicesEnabledAsync: typeof Location.hasServicesEnabledAsync
     getLastKnownPositionAsync: typeof Location.getLastKnownPositionAsync
     watchPositionAsync: typeof Location.watchPositionAsync
-    reverseGeocodePlaceName: typeof reverseGeocodePlaceName
+    reverseGeocodePlace: typeof reverseGeocodePlace
 }
 
 const defaultDeps: DeviceLocationDeps = {
@@ -20,7 +23,7 @@ const defaultDeps: DeviceLocationDeps = {
     hasServicesEnabledAsync: Location.hasServicesEnabledAsync,
     getLastKnownPositionAsync: Location.getLastKnownPositionAsync,
     watchPositionAsync: Location.watchPositionAsync,
-    reverseGeocodePlaceName,
+    reverseGeocodePlace,
 }
 
 /**
@@ -30,7 +33,7 @@ const defaultDeps: DeviceLocationDeps = {
 export class DeviceLocationService {
     private inFlight: Promise<Location.LocationObject> | null = null
     private activeCancel: (() => void) | null = null
-    private readonly geocodeCache = new Map<string, string>()
+    private readonly geocodeCache = new Map<string, ReverseGeocodePlace>()
     private readonly deps: DeviceLocationDeps
 
     constructor(deps: Partial<DeviceLocationDeps> = {}) {
@@ -46,20 +49,26 @@ export class DeviceLocationService {
         this.geocodeCache.clear()
     }
 
-    async reverseGeocodeCached(
+    async reverseGeocodePlaceCached(
         latitude: number,
         longitude: number
-    ): Promise<string> {
+    ): Promise<ReverseGeocodePlace> {
         const key = geocodeCacheKey(latitude, longitude)
         const cached = this.geocodeCache.get(key)
         if (cached != null) return cached
 
-        const name = await this.deps.reverseGeocodePlaceName(
-            latitude,
-            longitude
-        )
-        this.geocodeCache.set(key, name)
-        return name
+        const place = await this.deps.reverseGeocodePlace(latitude, longitude)
+        this.geocodeCache.set(key, place)
+        return place
+    }
+
+    /** @deprecated Prefer reverseGeocodePlaceCached for country codes. */
+    async reverseGeocodeCached(
+        latitude: number,
+        longitude: number
+    ): Promise<string> {
+        const place = await this.reverseGeocodePlaceCached(latitude, longitude)
+        return place.name
     }
 
     /**

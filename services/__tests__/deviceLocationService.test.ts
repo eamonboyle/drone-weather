@@ -42,7 +42,10 @@ describe('DeviceLocationService', () => {
 
         const service = new DeviceLocationService({
             watchPositionAsync: watchPositionAsync as never,
-            reverseGeocodePlaceName: jest.fn(async () => 'Dublin'),
+            reverseGeocodePlace: jest.fn(async () => ({
+                name: 'Dublin',
+                countryCode: 'ie',
+            })),
         })
 
         const p1 = service.acquireFirstFix()
@@ -117,17 +120,23 @@ describe('DeviceLocationService', () => {
         expect(watchPositionAsync).toHaveBeenCalledTimes(2)
     })
 
-    it('reuses reverse-geocoded names for rounded coordinates', async () => {
-        const reverseGeocodePlaceName = jest.fn(async () => 'Test City')
+    it('reuses reverse-geocoded places for rounded coordinates', async () => {
+        const reverseGeocodePlace = jest.fn(async () => ({
+            name: 'Test City',
+            countryCode: 'ie',
+        }))
         const service = new DeviceLocationService({
-            reverseGeocodePlaceName,
+            reverseGeocodePlace,
         })
 
-        const a = await service.reverseGeocodeCached(53.3501, -6.2603)
+        const a = await service.reverseGeocodePlaceCached(53.3501, -6.2603)
         // Same toFixed(3) bucket (53.350,-6.260)
-        const b = await service.reverseGeocodeCached(53.3504, -6.2602)
-        expect(a).toBe('Test City')
-        expect(b).toBe('Test City')
-        expect(reverseGeocodePlaceName).toHaveBeenCalledTimes(1)
+        const b = await service.reverseGeocodePlaceCached(53.3504, -6.2602)
+        expect(a).toEqual({ name: 'Test City', countryCode: 'ie' })
+        expect(b).toEqual({ name: 'Test City', countryCode: 'ie' })
+        expect(reverseGeocodePlace).toHaveBeenCalledTimes(1)
+        expect(await service.reverseGeocodeCached(53.3501, -6.2603)).toBe(
+            'Test City'
+        )
     })
 })

@@ -69,7 +69,8 @@ The Map tab is **reference only** and does not affect weather flyability.
 | Layer | Source | Notes |
 |--------|--------|--------|
 | UK pack | Bundled `assets/airspace/uk-restrictions.geojson` | Bootstrap from OpenAIP GB, or replace via NATS KMZ ingest |
-| Global | OpenAIP daily country exports (cached on device) | CC BY-NC attribution required |
+| Global | OpenAIP daily country exports (cached on device) | CC BY-NC 4.0 — attribution required; data must remain free (not sold exclusively). Large countries may be rejected on-device until prebuilt packs exist. |
+| Basemap | OpenFreeMap / OpenMapTiles / OpenStreetMap | Native MapLibre attribution + ODbL credit in Map → About |
 
 ```bash
 # Official NATS UAS KMZ/KML → bundled UK pack

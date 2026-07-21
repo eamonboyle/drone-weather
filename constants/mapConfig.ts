@@ -23,10 +23,25 @@ export const MAP_CONFIG = {
         'https://storage.googleapis.com/29f98e10-a489-4c82-ae5e-489dbcd4912f',
     /** Refresh country packs after this many days. */
     packTtlDays: 7,
+    /**
+     * Auto-accept raw OpenAIP downloads up to this size (no confirmation).
+     * Covers typical mid-size countries (e.g. CA ~12 MB) on modern devices.
+     */
+    confirmRawPackBytes: 100 * 1024 * 1024,
+    /**
+     * Hard ceiling before parse. Larger packs (e.g. US ~473 MB) need
+     * off-device normalized / prebuilt artifacts.
+     */
+    maxRawPackBytes: 250 * 1024 * 1024,
+    /** Reject normalized packs with more features than this. */
+    maxNormalizedFeatureCount: 25_000,
     openAipAttribution:
         'Airspace outside UK (and UK community overlay): OpenAIP data, CC BY-NC 4.0 — https://www.openaip.net',
     natsAttribution:
         'UK permanent UAS restrictions: derived from NATS / UK AIP ENR 5.1 digital datasets when ingested.',
+    basemapAttribution:
+        'Basemap: OpenFreeMap © OpenMapTiles · Data from OpenStreetMap (ODbL)',
+    osmCopyrightUrl: 'https://www.openstreetmap.org/copyright',
 } as const
 
 function inBox(
@@ -49,11 +64,23 @@ export function isInUkBounds(latitude: number, longitude: number): boolean {
     )
 }
 
-/** Rough ISO country hint from map center for OpenAIP pack selection. */
-export function guessCountryCode(
+export function normalizeCountryCode(
+    code: string | null | undefined
+): string | null {
+    if (!code) return null
+    const normalized = code.trim().toLowerCase()
+    if (!/^[a-z]{2}$/.test(normalized)) return null
+    return normalized
+}
+
+/**
+ * High-confidence offline ISO hint only.
+ * Ambiguous Canada/US border regions return null — never guess.
+ */
+export function guessCountryCodeOffline(
     latitude: number,
     longitude: number
-): string {
+): string | null {
     // Ireland (ROI) before UK so Dublin is not treated as GB.
     if (
         latitude >= 51.3 &&
@@ -65,7 +92,6 @@ export function guessCountryCode(
         return 'ie'
     }
     if (isInUkBounds(latitude, longitude)) return 'gb'
-    // Very coarse continental hints — OpenAIP pack fetch is best-effort.
     if (
         latitude >= 41 &&
         latitude <= 51.2 &&
@@ -98,13 +124,42 @@ export function guessCountryCode(
     ) {
         return 'it'
     }
-    if (
-        latitude >= 24 &&
-        latitude <= 50 &&
-        longitude >= -125 &&
-        longitude <= -66
-    ) {
-        return 'us'
-    }
-    return 'gb'
+    // Unambiguous CONUS only — exclude Canada-adjacent northern/eastern band.
+    if (isUnambiguousConus(latitude, longitude)) return 'us'
+    return null
+}
+
+/**
+ * CONUS away from the Canada border ambiguity zone.
+ * Great Lakes / northeast north of 41.5°N and the 49th parallel west return null.
+ */
+function isUnambiguousConus(latitude: number, longitude: number): boolean {
+    if (longitude < -125 || longitude > -66) return false
+    if (latitude < 24 || latitude > 48.5) return false
+    // Eastern half near/over the border and Great Lakes — do not guess US vs CA.
+    if (latitude > 41.5 && longitude > -95) return false
+    return true
+}
+
+/**
+ * Resolve ISO country for airspace pack selection.
+ * Preference: explicit ISO → offline high-confidence → null.
+ * Callers should try reverse-geocode ISO before falling back to offline.
+ */
+export function resolveCountryCode(
+    latitude: number,
+    longitude: number,
+    preferredCode?: string | null
+): string | null {
+    const preferred = normalizeCountryCode(preferredCode)
+    if (preferred) return preferred
+    return guessCountryCodeOffline(latitude, longitude)
+}
+
+/** @deprecated Prefer resolveCountryCode — kept for transitional call sites. */
+export function guessCountryCode(
+    latitude: number,
+    longitude: number
+): string | null {
+    return guessCountryCodeOffline(latitude, longitude)
 }

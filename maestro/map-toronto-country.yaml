@@ -1,0 +1,76 @@
+appId: com.eamonsdiary.droneweather
+---
+# Toronto must resolve as CA (never US). Mid-size CA pack should load (≤100 MB auto).
+- launchApp:
+    appId: "com.eamonsdiary.droneweather"
+    stopApp: true
+- tapOn:
+    text: "Cancel"
+    optional: true
+- tapOn:
+    text: "Dismiss"
+    optional: true
+- tapOn:
+    text: "Minimize"
+    optional: true
+- extendedWaitUntil:
+    visible: "Safe to Fly|Not Safe to Fly|Select hour for conditions"
+    timeout: 60000
+# Deep-link to the location search screen (tab/LocationBar taps are flaky under XCTest).
+- openLink: myapp://location
+- tapOn:
+    text: "Open"
+    optional: true
+- extendedWaitUntil:
+    visible: "Locations|Search launch sites|Search launch sites..."
+    timeout: 20000
+- tapOn:
+    text: "Search launch sites|Search launch sites..."
+- inputText: "Toronto"
+# LocationCard exposes primary/secondary separately; a11y is "Toronto, Canada…".
+- extendedWaitUntil:
+    visible: ".*Toronto, Canada.*"
+    timeout: 20000
+- tapOn:
+    text: "Dismiss"
+    optional: true
+- tapOn:
+    text: "Hide keyboard|Done"
+    optional: true
+- tapOn: ".*Toronto, Canada.*"
+- extendedWaitUntil:
+    visible: "Safe to Fly|Not Safe to Fly|Select hour for conditions|Locations"
+    timeout: 20000
+- tapOn:
+    text: "Dismiss"
+    optional: true
+- tapOn:
+    text: "Minimize"
+    optional: true
+- openLink: myapp://map
+- tapOn:
+    text: "Open"
+    optional: true
+- tapOn:
+    text: "Dismiss"
+    optional: true
+- extendedWaitUntil:
+    visible: "Airspace reference|Reference only|OpenAIP|UK ·|UK pack"
+    timeout: 45000
+- assertVisible:
+    text: "Airspace reference|Reference only|OpenAIP"
+- extendedWaitUntil:
+    visible: "Updating…"
+    timeout: 5000
+    optional: true
+- extendedWaitUntil:
+    notVisible: "Updating…"
+    timeout: 90000
+- assertVisible:
+    text: "Airspace reference|Reference only|OpenAIP"
+- assertNotVisible: "· US"
+- assertNotVisible:
+    text: ".*too large.*|.*prebuilt pack.*"
+# statusMeta joins with "  ·  " (double spaces around the middle dot)
+- assertVisible:
+    text: ".*CA.*"

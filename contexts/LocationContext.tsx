@@ -8,20 +8,39 @@ import React, {
 } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Location from 'expo-location'
+import { normalizeCountryCode } from '@/constants/mapConfig'
 import { sharedDeviceLocationService } from '@/services/deviceLocationService'
 import { getHasCompletedOnboarding } from '@/services/onboardingService'
 
-const LAST_LOCATION_KEY = 'last_known_location'
+/** Legacy key: bare Location.LocationObject JSON. */
+const LEGACY_LOCATION_KEY = 'last_known_location'
+/** Atomic active location: coords + name + ISO country. */
+const ACTIVE_LOCATION_KEY = 'last_active_location_v2'
+
+export interface ActiveLocation {
+    location: Location.LocationObject
+    name: string
+    countryCode: string | null
+}
+
+export interface UpdateLocationMeta {
+    name?: string
+    countryCode?: string | null
+}
 
 interface LocationContextType {
     location: Location.LocationObject | null
     locationName: string
+    locationCountryCode: string | null
     errorMsg: string | null
     isLocating: boolean
     deviceLocation: Location.LocationObject | null
     deviceLocationName: string
     isDeviceLocating: boolean
-    updateLocation: (manualLocation?: Location.LocationObject) => Promise<void>
+    updateLocation: (
+        manualLocation?: Location.LocationObject,
+        meta?: UpdateLocationMeta
+    ) => Promise<void>
     refreshLocation: () => Promise<void>
     /** Soft shared GPS for preview only — does not change the active selection. */
     ensureDeviceLocation: () => Promise<void>
@@ -31,18 +50,83 @@ const LocationContext = createContext<LocationContextType | undefined>(
     undefined
 )
 
-async function persistLocation(location: Location.LocationObject) {
+function isLocationObject(value: unknown): value is Location.LocationObject {
+    if (!value || typeof value !== 'object') return false
+    const coords = (value as Location.LocationObject).coords
+    return (
+        coords != null &&
+        typeof coords.latitude === 'number' &&
+        typeof coords.longitude === 'number'
+    )
+}
+
+function parseActiveLocation(raw: string): ActiveLocation | null {
     try {
-        await AsyncStorage.setItem(LAST_LOCATION_KEY, JSON.stringify(location))
+        const parsed: unknown = JSON.parse(raw)
+        if (!parsed || typeof parsed !== 'object') return null
+
+        // New shape: { location, name, countryCode }
+        if ('location' in parsed) {
+            const record = parsed as {
+                location?: unknown
+                name?: unknown
+                countryCode?: unknown
+            }
+            if (!isLocationObject(record.location)) return null
+            return {
+                location: record.location,
+                name: typeof record.name === 'string' ? record.name : '',
+                countryCode: normalizeCountryCode(
+                    typeof record.countryCode === 'string'
+                        ? record.countryCode
+                        : null
+                ),
+            }
+        }
+
+        // Legacy shape: bare LocationObject
+        if (isLocationObject(parsed)) {
+            return {
+                location: parsed,
+                name: '',
+                countryCode: null,
+            }
+        }
+
+        return null
+    } catch {
+        return null
+    }
+}
+
+async function persistActiveLocation(active: ActiveLocation): Promise<void> {
+    try {
+        await AsyncStorage.setItem(ACTIVE_LOCATION_KEY, JSON.stringify(active))
+        // Keep legacy key in sync for older readers during rollout.
+        await AsyncStorage.setItem(
+            LEGACY_LOCATION_KEY,
+            JSON.stringify(active.location)
+        )
     } catch (error) {
         console.error('Error persisting location:', error)
     }
 }
 
-async function loadPersistedLocation(): Promise<Location.LocationObject | null> {
+async function loadPersistedActiveLocation(): Promise<ActiveLocation | null> {
     try {
-        const stored = await AsyncStorage.getItem(LAST_LOCATION_KEY)
-        return stored ? JSON.parse(stored) : null
+        const stored = await AsyncStorage.getItem(ACTIVE_LOCATION_KEY)
+        if (stored) {
+            const active = parseActiveLocation(stored)
+            if (active) return active
+        }
+
+        const legacy = await AsyncStorage.getItem(LEGACY_LOCATION_KEY)
+        if (!legacy) return null
+        const migrated = parseActiveLocation(legacy)
+        if (migrated) {
+            await persistActiveLocation(migrated)
+        }
+        return migrated
     } catch (error) {
         console.error('Error loading persisted location:', error)
         return null
@@ -54,6 +138,9 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         null
     )
     const [locationName, setLocationName] = useState<string>('')
+    const [locationCountryCode, setLocationCountryCode] = useState<
+        string | null
+    >(null)
     const [errorMsg, setErrorMsg] = useState<string | null>(null)
     const [isLocating, setIsLocating] = useState(true)
     const [deviceLocation, setDeviceLocation] =
@@ -62,40 +149,75 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     const [isDeviceLocating, setIsDeviceLocating] = useState(false)
     const isManualSelectionRef = useRef(false)
     const acquireGenerationRef = useRef(0)
-    const activeNameTokenRef = useRef(0)
+    const activePlaceTokenRef = useRef(0)
     const deviceNameTokenRef = useRef(0)
 
-    const resolveName = useCallback(
-        async (coords: Location.LocationObjectCoords): Promise<string> => {
-            try {
-                return await sharedDeviceLocationService.reverseGeocodeCached(
-                    coords.latitude,
-                    coords.longitude
-                )
-            } catch (error) {
-                console.error('Error reverse geocoding:', error)
-                return 'Location name unavailable'
-            }
-        },
-        []
-    )
-
     const applyActiveLocation = useCallback(
-        (nextLocation: Location.LocationObject, name?: string) => {
+        (
+            nextLocation: Location.LocationObject,
+            meta?: UpdateLocationMeta
+        ) => {
             setLocation(nextLocation)
-            void persistLocation(nextLocation)
-            if (name != null) {
-                setLocationName(name)
+
+            const hasName = meta?.name != null
+            const hasCountry = meta != null && 'countryCode' in meta
+            const explicitName = hasName ? meta.name! : null
+            const explicitCountry = hasCountry
+                ? normalizeCountryCode(meta.countryCode ?? null)
+                : undefined
+
+            if (explicitName != null) setLocationName(explicitName)
+            if (explicitCountry !== undefined) {
+                setLocationCountryCode(explicitCountry)
+            }
+
+            if (explicitName != null && explicitCountry !== undefined) {
+                void persistActiveLocation({
+                    location: nextLocation,
+                    name: explicitName,
+                    countryCode: explicitCountry,
+                })
                 return
             }
-            const token = ++activeNameTokenRef.current
-            void resolveName(nextLocation.coords).then((resolved) => {
-                if (token === activeNameTokenRef.current) {
-                    setLocationName(resolved)
-                }
-            })
+
+            const token = ++activePlaceTokenRef.current
+            void sharedDeviceLocationService
+                .reverseGeocodePlaceCached(
+                    nextLocation.coords.latitude,
+                    nextLocation.coords.longitude
+                )
+                .then((place) => {
+                    if (token !== activePlaceTokenRef.current) return
+                    const nextName = explicitName ?? place.name
+                    const nextCountry =
+                        explicitCountry !== undefined
+                            ? explicitCountry
+                            : place.countryCode
+                    setLocationName(nextName)
+                    setLocationCountryCode(nextCountry)
+                    void persistActiveLocation({
+                        location: nextLocation,
+                        name: nextName,
+                        countryCode: nextCountry,
+                    })
+                })
+                .catch((error) => {
+                    console.error('Error reverse geocoding:', error)
+                    if (token !== activePlaceTokenRef.current) return
+                    if (explicitName == null) {
+                        setLocationName('Location name unavailable')
+                    }
+                    void persistActiveLocation({
+                        location: nextLocation,
+                        name: explicitName ?? 'Location name unavailable',
+                        countryCode:
+                            explicitCountry !== undefined
+                                ? explicitCountry
+                                : null,
+                    })
+                })
         },
-        [resolveName]
+        []
     )
 
     const applyDeviceLocation = useCallback(
@@ -106,13 +228,21 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
                 return
             }
             const token = ++deviceNameTokenRef.current
-            void resolveName(nextLocation.coords).then((resolved) => {
-                if (token === deviceNameTokenRef.current) {
-                    setDeviceLocationName(resolved)
-                }
-            })
+            void sharedDeviceLocationService
+                .reverseGeocodePlaceCached(
+                    nextLocation.coords.latitude,
+                    nextLocation.coords.longitude
+                )
+                .then((place) => {
+                    if (token === deviceNameTokenRef.current) {
+                        setDeviceLocationName(place.name)
+                    }
+                })
+                .catch((error) => {
+                    console.error('Error reverse geocoding:', error)
+                })
         },
-        [resolveName]
+        []
     )
 
     const acquireDeviceLocation = useCallback(
@@ -140,10 +270,13 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
 
                 if (status !== 'granted') {
                     if (applyToActive) {
-                        const persisted = await loadPersistedLocation()
+                        const persisted = await loadPersistedActiveLocation()
                         if (!isCurrent()) return
                         if (persisted) {
-                            applyActiveLocation(persisted)
+                            applyActiveLocation(persisted.location, {
+                                name: persisted.name || undefined,
+                                countryCode: persisted.countryCode,
+                            })
                             setErrorMsg(
                                 'Location permission denied — showing last known location'
                             )
@@ -163,10 +296,13 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
 
                 if (!servicesEnabled) {
                     if (applyToActive) {
-                        const persisted = await loadPersistedLocation()
+                        const persisted = await loadPersistedActiveLocation()
                         if (!isCurrent()) return
                         if (persisted) {
-                            applyActiveLocation(persisted)
+                            applyActiveLocation(persisted.location, {
+                                name: persisted.name || undefined,
+                                countryCode: persisted.countryCode,
+                            })
                             setErrorMsg(
                                 'Location services are off — showing last known location'
                             )
@@ -183,12 +319,15 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
                 // Active fallback may use persisted last selection; device preview
                 // must only use real GPS last-known / fresh fix (never manual persist).
                 if (applyToActive && !force) {
-                    const persisted = await loadPersistedLocation()
+                    const persisted = await loadPersistedActiveLocation()
                     if (!isCurrent()) return
                     if (persisted) {
-                        activeFallback = persisted
+                        activeFallback = persisted.location
                         if (!isManualSelectionRef.current) {
-                            applyActiveLocation(persisted)
+                            applyActiveLocation(persisted.location, {
+                                name: persisted.name || undefined,
+                                countryCode: persisted.countryCode,
+                            })
                         }
                     }
                 }
@@ -223,10 +362,14 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
                         })
                     if (!isCurrent()) return
 
-                    const name = await resolveName(currentLocation.coords)
+                    const place =
+                        await sharedDeviceLocationService.reverseGeocodePlaceCached(
+                            currentLocation.coords.latitude,
+                            currentLocation.coords.longitude
+                        )
                     if (!isCurrent()) return
 
-                    applyDeviceLocation(currentLocation, name)
+                    applyDeviceLocation(currentLocation, place.name)
 
                     // Only replace the active selection when this acquire is meant
                     // for the active location and the user has not picked manually
@@ -236,7 +379,10 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
                         (force || !isManualSelectionRef.current)
                     ) {
                         isManualSelectionRef.current = false
-                        applyActiveLocation(currentLocation, name)
+                        applyActiveLocation(currentLocation, {
+                            name: place.name,
+                            countryCode: place.countryCode,
+                        })
                     }
                 } catch {
                     if (!isCurrent()) return
@@ -281,13 +427,16 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
                 }
             }
         },
-        [applyActiveLocation, applyDeviceLocation, resolveName]
+        [applyActiveLocation, applyDeviceLocation]
     )
 
-    async function updateLocation(manualLocation?: Location.LocationObject) {
+    async function updateLocation(
+        manualLocation?: Location.LocationObject,
+        meta?: UpdateLocationMeta
+    ) {
         if (manualLocation) {
             isManualSelectionRef.current = true
-            applyActiveLocation(manualLocation)
+            applyActiveLocation(manualLocation, meta)
             setIsLocating(false)
             return
         }
@@ -335,6 +484,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
             value={{
                 location,
                 locationName,
+                locationCountryCode,
                 errorMsg,
                 isLocating,
                 deviceLocation,
