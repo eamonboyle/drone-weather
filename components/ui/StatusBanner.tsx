@@ -1,5 +1,6 @@
-import { View, Text, Pressable } from 'react-native'
+import { View, Text, Pressable, type ImageSourcePropType } from 'react-native'
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
+import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Theme } from '@/constants/Theme'
 
@@ -86,6 +87,7 @@ export function StatusBanner({
 
 interface EmptyStateProps {
     icon?: keyof typeof MaterialCommunityIcons.glyphMap
+    image?: ImageSourcePropType
     message: string
     actionLabel?: string
     onAction?: () => void
@@ -93,17 +95,27 @@ interface EmptyStateProps {
 
 export function EmptyState({
     icon = 'cloud-alert',
+    image,
     message,
     actionLabel,
     onAction,
 }: EmptyStateProps) {
     return (
         <View className="flex-1 justify-center items-center px-6">
-            <MaterialCommunityIcons
-                name={icon}
-                size={48}
-                color={Theme.colors.accent}
-            />
+            {image ? (
+                <Image
+                    source={image}
+                    style={{ width: 180, height: 180, borderRadius: 24 }}
+                    contentFit="cover"
+                    accessibilityIgnoresInvertColors
+                />
+            ) : (
+                <MaterialCommunityIcons
+                    name={icon}
+                    size={48}
+                    color={Theme.colors.accent}
+                />
+            )}
             <Text
                 className="text-slate-300 text-base text-center mt-4"
                 style={{ fontFamily: 'DMSans' }}

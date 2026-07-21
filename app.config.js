@@ -3,7 +3,7 @@ require('dotenv').config()
 
 module.exports = {
     expo: {
-        name: 'drone-weather',
+        name: 'Drone Weather',
         slug: 'drone-weather',
         version: '1.0.0',
         orientation: 'default',
@@ -35,7 +35,8 @@ module.exports = {
         },
         web: {
             bundler: 'metro',
-            output: 'static',
+            // Client-only so MapLibre native modules are not SSR'd.
+            output: 'single',
             favicon: './assets/images/favicon.png',
         },
         plugins: [

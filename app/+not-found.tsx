@@ -1,18 +1,21 @@
 import { Link, Stack } from 'expo-router'
 import { Text, Pressable, StyleSheet } from 'react-native'
+import { Image } from 'expo-image'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { Theme } from '@/constants/Theme'
+
+const BRAND_MARK = require('@/assets/images/brand/mark-sm.png')
 
 export default function NotFoundScreen() {
     return (
         <>
             <Stack.Screen options={{ title: 'Not found', headerShown: false }} />
             <SafeAreaView style={styles.container}>
-                <MaterialCommunityIcons
-                    name="compass-off"
-                    size={48}
-                    color={Theme.colors.accent}
+                <Image
+                    source={BRAND_MARK}
+                    style={styles.mark}
+                    contentFit="contain"
+                    accessibilityIgnoresInvertColors
                 />
                 <Text style={styles.title}>Screen not found</Text>
                 <Text style={styles.body}>
@@ -41,6 +44,11 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         padding: 24,
         gap: 12,
+    },
+    mark: {
+        width: 88,
+        height: 88,
+        borderRadius: 20,
     },
     title: {
         color: Theme.colors.text,

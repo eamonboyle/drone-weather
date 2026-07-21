@@ -47,6 +47,8 @@ import { SegmentChips } from '@/components/ui/SegmentChips'
 import { DataFreshnessBanner } from '@/components/ui/DataFreshnessBanner'
 import { EmptyState } from '@/components/ui/StatusBanner'
 
+const EMPTY_WEATHER_IMAGE = require('@/assets/images/empty/weather.png')
+
 const ANDROID_CLIP = Platform.OS === 'android'
 const IS_IOS = Platform.OS === 'ios'
 
@@ -212,7 +214,7 @@ export default function ForecastTable() {
             <SafeAreaView className="flex-1 bg-background" edges={['top']}>
                 <LocationBar locationName={locationName} />
                 <EmptyState
-                    icon="cloud-off-outline"
+                    image={EMPTY_WEATHER_IMAGE}
                     message={message}
                     actionLabel="Retry"
                     onAction={() => void refetch()}

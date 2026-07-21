@@ -58,16 +58,8 @@ export const LocationCard = memo(function LocationCard({
     }
 
     return (
-        <Pressable
-            onPress={handlePress}
-            disabled={isSelecting}
-            accessibilityRole="button"
-            accessibilityState={{
-                selected: isActive,
-                disabled: isSelecting,
-            }}
-            accessibilityLabel={`${primary}${secondary ? `, ${secondary}` : ''}${isActive ? ', active location' : ''}${isFavorite ? ', favorite' : ''}`}
-            className="mb-3 rounded-2xl border border-white/5 active:bg-white/5 overflow-hidden"
+        <View
+            className="mb-3 rounded-2xl border border-white/5 overflow-hidden"
             style={{
                 backgroundColor: 'rgba(22, 26, 32, 0.6)',
                 opacity: isSelecting && !isActiveSelection ? 0.5 : 1,
@@ -75,60 +67,74 @@ export const LocationCard = memo(function LocationCard({
             }}
         >
             <View className="flex-row items-center p-4">
-                <View
-                    className="w-10 h-10 rounded-full items-center justify-center mr-3"
-                    style={{ backgroundColor: 'rgba(245, 158, 11, 0.12)' }}
+                <Pressable
+                    onPress={handlePress}
+                    disabled={isSelecting}
+                    accessibilityRole="button"
+                    accessibilityState={{
+                        selected: isActive,
+                        disabled: isSelecting,
+                    }}
+                    accessibilityLabel={`${primary}${secondary ? `, ${secondary}` : ''}${isActive ? ', active location' : ''}${isFavorite ? ', favorite' : ''}`}
+                    className="flex-1 flex-row items-center active:opacity-80"
+                    style={{ minHeight: 44 }}
                 >
-                    <MaterialCommunityIcons
-                        name="map-marker"
-                        size={20}
-                        color="#f59e0b"
-                    />
-                </View>
+                    <View
+                        className="w-10 h-10 rounded-full items-center justify-center mr-3"
+                        style={{ backgroundColor: 'rgba(245, 158, 11, 0.12)' }}
+                    >
+                        <MaterialCommunityIcons
+                            name="map-marker"
+                            size={20}
+                            color="#f59e0b"
+                        />
+                    </View>
 
-                <View className="flex-1 pr-2">
-                    <View className="flex-row items-center gap-2 flex-wrap">
-                        <Text
-                            className="text-slate-100 text-base"
-                            style={{ fontFamily: 'Outfit-SemiBold' }}
-                            numberOfLines={1}
-                        >
-                            {primary}
-                        </Text>
-                        {isActive && (
-                            <View
-                                className="px-2 py-0.5 rounded-full"
-                                style={{
-                                    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-                                }}
+                    <View className="flex-1 pr-2">
+                        <View className="flex-row items-center gap-2 flex-wrap">
+                            <Text
+                                className="text-slate-100 text-base"
+                                style={{ fontFamily: 'Outfit-SemiBold' }}
+                                numberOfLines={1}
                             >
-                                <Text
-                                    className="text-xs"
+                                {primary}
+                            </Text>
+                            {isActive && (
+                                <View
+                                    className="px-2 py-0.5 rounded-full"
                                     style={{
-                                        fontFamily: 'DMSans-Medium',
-                                        color: '#f59e0b',
+                                        backgroundColor:
+                                            'rgba(245, 158, 11, 0.15)',
                                     }}
                                 >
-                                    Active
-                                </Text>
-                            </View>
-                        )}
-                    </View>
-                    {secondary ? (
-                        <Text
-                            className="text-slate-500 text-sm mt-0.5"
-                            style={{ fontFamily: 'DMSans' }}
-                            numberOfLines={2}
-                        >
-                            {secondary}
-                        </Text>
-                    ) : null}
-                    {flyabilityStatus !== undefined ? (
-                        <View className="mt-2">
-                            <FlyabilityChip status={flyabilityStatus} />
+                                    <Text
+                                        className="text-xs"
+                                        style={{
+                                            fontFamily: 'DMSans-Medium',
+                                            color: '#f59e0b',
+                                        }}
+                                    >
+                                        Active
+                                    </Text>
+                                </View>
+                            )}
                         </View>
-                    ) : null}
-                </View>
+                        {secondary ? (
+                            <Text
+                                className="text-slate-500 text-sm mt-0.5"
+                                style={{ fontFamily: 'DMSans' }}
+                                numberOfLines={2}
+                            >
+                                {secondary}
+                            </Text>
+                        ) : null}
+                        {flyabilityStatus !== undefined ? (
+                            <View className="mt-2">
+                                <FlyabilityChip status={flyabilityStatus} />
+                            </View>
+                        ) : null}
+                    </View>
+                </Pressable>
 
                 <View className="flex-row items-center gap-1">
                     {isActiveSelection ? (
@@ -136,10 +142,7 @@ export const LocationCard = memo(function LocationCard({
                     ) : (
                         <>
                             <Pressable
-                                onPress={(event) => {
-                                    event.stopPropagation()
-                                    handleToggleFavorite()
-                                }}
+                                onPress={handleToggleFavorite}
                                 accessibilityRole="button"
                                 accessibilityLabel={
                                     isFavorite
@@ -149,7 +152,11 @@ export const LocationCard = memo(function LocationCard({
                                 accessibilityState={{ selected: isFavorite }}
                                 className="p-2"
                                 hitSlop={4}
-                                style={{ minHeight: 44, minWidth: 44, justifyContent: 'center' }}
+                                style={{
+                                    minHeight: 44,
+                                    minWidth: 44,
+                                    justifyContent: 'center',
+                                }}
                             >
                                 <MaterialCommunityIcons
                                     name={isFavorite ? 'star' : 'star-outline'}
@@ -159,12 +166,16 @@ export const LocationCard = memo(function LocationCard({
                             </Pressable>
                             {onRemove ? (
                                 <Pressable
-                                    onPress={(event) => {
-                                        event.stopPropagation()
-                                        onRemove()
-                                    }}
+                                    onPress={onRemove}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`Remove ${primary}`}
                                     className="p-2"
                                     hitSlop={4}
+                                    style={{
+                                        minHeight: 44,
+                                        minWidth: 44,
+                                        justifyContent: 'center',
+                                    }}
                                 >
                                     <MaterialCommunityIcons
                                         name="close"
@@ -177,6 +188,6 @@ export const LocationCard = memo(function LocationCard({
                     )}
                 </View>
             </View>
-        </Pressable>
+        </View>
     )
 })

@@ -33,6 +33,8 @@ import { WEATHER_SOURCE_OPEN_METEO } from '@/types/weather'
 import { DataFreshnessBanner } from '@/components/ui/DataFreshnessBanner'
 import { EmptyState, StatusBanner } from '@/components/ui/StatusBanner'
 
+const EMPTY_WEATHER_IMAGE = require('@/assets/images/empty/weather.png')
+
 export default function Home() {
     const tabBarHeight = useBottomTabBarHeight()
     const { locationName, errorMsg, isLocating } = useLocation()
@@ -150,6 +152,7 @@ export default function Home() {
         const message = error ?? errorMsg ?? 'Unable to load weather data'
         return (
             <EmptyState
+                image={EMPTY_WEATHER_IMAGE}
                 message={message}
                 actionLabel="Retry"
                 onAction={() => void refetch()}

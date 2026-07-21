@@ -1,5 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+    // Required for react-native-web / NativeWind color-scheme interop.
+    darkMode: 'class',
     content: [
         './app/**/*.{js,jsx,ts,tsx}',
         './components/**/*.{js,jsx,ts,tsx}',
